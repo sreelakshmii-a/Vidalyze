@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Comment Analyzer Dashboard</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f8f9fa;
+            color: #343a40;
+        }
+        .container {
+            margin-top: 30px;
+            margin-bottom: 50px;
+        }
+        .header {
+            background-color: #007bff;
+            color: white;
+            padding: 20px;
+            border-radius: 8px 8px 0 0;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .card {
+            margin-bottom: 20px;
+            box-shadow: 0 4px 8px rgba(0,0,0,.05);
+            border-radius: 8px;
+        }
+        .results-section {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+        }
+        .sentiment-item, .category-item {
+            flex: 1 1 calc(33% - 20px); /* Approx 3 items per row */
+            min-width: 200px;
+            background-color: #e9ecef;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .sentiment-item strong, .category-item strong {
+            font-size: 1.2em;
+            color: #0056b3;
+        }
+        .table-container {
+            max-height: 500px; /* Max height for scrollable table */
+            overflow-y: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+        }
+        .table thead th {
+            background-color: #f1f1f1;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+        .error-message {
+            color: #dc3545;
+            font-weight: bold;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>YouTube Comment Analyzer</h1>
+        <p>Get insights into viewer sentiment and comment categories.</p>
+    </div>
+
+    <div class="container">
+        <div class="card p-4">
+            <form action="/analyze" method="post">
+                <div class="form-group">
+                    <label for="youtube_url">Enter YouTube Video URL:</label>
+                    <input type="url" class="form-control" id="youtube_url" name="youtube_url"
+                           placeholder="e.g., https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+                           value="{{ youtube_url if youtube_url else '' }}" required>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">Analyze Comments</button>
+            </form>
+
+            {% if error %}
+                <div class="alert alert-danger mt-4" role="alert">
+                    {{ error }}
+                </div>
+            {% endif %}
+        </div>
+
+        {% if total_comments is defined %}
+            <div class="card p-4 mt-4">
+               <h2 class="mb-4">Analysis Results for: <a href="{{ youtube_url }}" target="_blank">{{ video_title }}</a></h2>
+                <p class="lead">Total Comments Analyzed: <strong>{{ total_comments }}</strong></p>
+
+                <hr>
+
+                <h3 class="mt-4">📊 Overall Viewer Sentiment:</h3>
+                {% if overall_sentiment %}
+                    <div class="row text-center results-section">
+                        {% for sentiment, percentage in overall_sentiment.items() %}
+                            <div class="col-md-4 sentiment-item">
+                                <strong>{{ sentiment }}</strong><br>
+                                <span class="badge badge-primary">{{ "%.2f"|format(percentage) }}%</span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p>No sentiment data available.</p>
+                {% endif %}
+
+                <h3 class="mt-4">🧠 Comment Categories:</h3>
+                {% if comment_categories %}
+                    <div class="row text-center results-section">
+                        {% for category, count in comment_categories.items() %}
+                            <div class="col-md-4 category-item">
+                                <strong>{{ category }}</strong><br>
+                                <span class="badge badge-secondary">{{ count }} comments</span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p>No category data available.</p>
+                {% endif %}
+
+                <h3 class="mt-4">📋 All Processed Comments:</h3>
+                {% if comments_data %}
+                    <div class="table-container">
+                        <table class="table table-striped table-hover">
+                            <thead>
+                                <tr>
+                                    <th scope="col">#</th>
+                                    <th scope="col">Comment</th>
+                                    <th scope="col">Sentiment</th>
+                                    <th scope="col">Category</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for comment in comments_data %}
+                                    <tr>
+                                        <th scope="row">{{ loop.index }}</th>
+                                        <td>{{ comment.comment_preview }}</td>
+                                        <td>
+                                            {% if comment.sentiment == 'Positive' %}
+                                                <span class="badge badge-success">{{ comment.sentiment }}</span>
+                                            {% elif comment.sentiment == 'Negative' %}
+                                                <span class="badge badge-danger">{{ comment.sentiment }}</span>
+                                            {% else %}
+                                                <span class="badge badge-secondary">{{ comment.sentiment }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if comment.category == 'Positive' %}
+                                                <span class="badge badge-success">{{ comment.category }}</span>
+                                            {% elif comment.category == 'Negative' %}
+                                                <span class="badge badge-danger">{{ comment.category }}</span>
+                                            {% elif comment.category == 'Suggestion' %}
+                                                <span class="badge badge-info">{{ comment.category }}</span>
+                                            {% elif comment.category == 'Help' %}
+                                                <span class="badge badge-warning">{{ comment.category }}</span>
+                                            {% else %}
+                                                <span class="badge badge-light">{{ comment.category }}</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <p>No comments to display.</p>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.4/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</body>
+</html>

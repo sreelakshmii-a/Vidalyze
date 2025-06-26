@@ -12,7 +12,7 @@
 
 ## 🛠 Tech Stack
 
-- Frontend: *[Loadig]*  
+- Frontend: *[Loading]*  
 - Backend: *[Python, Flask, FastAPI]*  
 - APIs/Libraries: *[YouTube Data API, NLTK/TextBlob/VADER]*
 

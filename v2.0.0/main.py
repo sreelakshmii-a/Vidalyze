@@ -342,7 +342,7 @@ async def main_vidalyze_flow(youtube_url):
 if __name__ == "__main__":
     # IMPORTANT: Replace with a YouTube video URL you want to analyze.
     # Ensure the video has comments.
-    example_youtube_url = "https://youtu.be/Kk2bDwRVxb8?si=MYURGRIG6FjkDL0O" # Rick Astley - Never Gonna Give You Up
+    example_youtube_url = "https://youtu.be/89WhKiUbB_w?si=_WlaXxivZvDTG8MZ" # Rick Astley - Never Gonna Give You Up
     # Or test with a short video with fewer comments for quicker testing
     # example_youtube_url = "https://www.youtube.com/watch?v=some_short_video_id"
 

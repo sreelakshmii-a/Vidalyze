@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vidalyze - YouTube Comment Analysis</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for Inter font and general aesthetics */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* Light gray background */
+            color: #374151; /* Dark gray text */
+        }
+        .card {
+            background-color: #ffffff;
+            border-radius: 1rem; /* Rounded corners */
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 1.5rem;
+        }
+        .btn-primary {
+            background-color: #ef4444; /* Red-500 */
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.75rem; /* Rounded corners */
+            transition: background-color 0.2s ease-in-out;
+        }
+        .btn-primary:hover {
+            background-color: #dc2626; /* Red-600 */
+        }
+        .input-field {
+            border: 1px solid #d1d5db; /* Gray-300 */
+            border-radius: 0.75rem;
+            padding: 0.75rem 1rem;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .loading-spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #ef4444; /* Red-500 */
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .comment-item {
+            background-color: #f9fafb; /* Lightest gray */
+            border-left: 4px solid;
+            border-radius: 0.75rem;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            transition: all 0.2s ease-in-out;
+        }
+        .comment-item.positive { border-color: #22c55e; /* Green-500 */ }
+        .comment-item.negative { border-color: #ef4444; /* Red-500 */ }
+        .comment-item.neutral { border-color: #6b7280; /* Gray-500 */ }
+        .comment-item.mixed { border-color: #f59e0b; /* Amber-500 */ }
+        .comment-item.suggestion { border-color: #3b82f6; /* Blue-500 */ }
+        .comment-item.help { border-color: #a855f7; /* Purple-500 */ }
+        .comment-item.neutral-other { border-color: #9ca3af; /* Gray-400 */ } /* For fallback's Neutral/Other */
+
+        /* Custom scrollbar for comment list */
+        .comment-list-container {
+            max-height: 600px; /* Adjust as needed */
+            overflow-y: auto;
+            padding-right: 0.5rem; /* Space for scrollbar */
+        }
+        .comment-list-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        .comment-list-container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        .comment-list-container::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 10px;
+        }
+        .comment-list-container::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div class="max-w-6xl mx-auto">
+        <header class="text-center mb-8">
+            <h1 class="text-5xl font-extrabold text-gray-900 mb-2">Vidalyze</h1>
+            <p class="text-xl text-gray-600">YouTube Comment Sentiment & Insight Analyzer</p>
+        </header>
+
+        <main class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Input Form and Video Info Card -->
+            <div class="lg:col-span-1 card">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">Analyze a YouTube Video</h2>
+                <form id="analysisForm" class="space-y-4">
+                    <div>
+                        <label for="youtube_url" class="block text-sm font-medium text-gray-700 mb-1">YouTube Video URL:</label>
+                        <input type="url" id="youtube_url" name="youtube_url" placeholder="e.g., https://www.youtube.com/watch?v=dQw4w9WgXcQ" required class="input-field focus:ring-red-500 focus:border-red-500">
+                    </div>
+                    <button type="submit" class="btn-primary w-full flex items-center justify-center space-x-2" id="analyzeButton">
+                        <span id="buttonText">Analyze Comments</span>
+                        <div id="loadingSpinner" class="loading-spinner hidden"></div>
+                    </button>
+                </form>
+
+                <div id="videoInfo" class="mt-6 p-4 bg-gray-50 rounded-lg hidden">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-2">Video Details:</h3>
+                    <p class="text-gray-700"><strong>Title:</strong> <span id="videoTitle"></span></p>
+                    <p class="text-gray-700"><strong>Total Comments Analyzed:</strong> <span id="totalComments"></span></p>
+                    <p class="text-gray-700"><strong>Analysis Method:</strong> <span id="analysisMethod" class="font-medium"></span></p>
+                    <a id="videoLink" href="#" target="_blank" class="text-red-600 hover:underline text-sm mt-2 block">View Video on YouTube</a>
+                </div>
+
+                <div id="errorMessage" class="mt-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg hidden" role="alert">
+                    <p id="errorText"></p>
+                </div>
+            </div>
+
+            <!-- Insights and Summaries Card -->
+            <div class="lg:col-span-2 card" id="resultsSection" style="display: none;">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">Analysis Results</h2>
+
+                <div class="mb-6">
+                    <h3 class="text-xl font-semibold text-gray-800 mb-2">Overall Insights</h3>
+                    <div id="overallInsights" class="prose max-w-none bg-gray-50 p-4 rounded-lg text-gray-700 leading-relaxed">
+                        <!-- Insights will be loaded here -->
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div>
+                        <h3 class="text-xl font-semibold text-gray-800 mb-2">Sentiment Distribution</h3>
+                        <div id="sentimentDistribution" class="space-y-2">
+                            <!-- Sentiment percentages will be loaded here -->
+                        </div>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-semibold text-gray-800 mb-2">Comment Categories</h3>
+                        <div id="commentCategories" class="space-y-2">
+                            <!-- Comment categories will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+
+                <h3 class="text-xl font-semibold text-gray-800 mb-4">Categorized Comments</h3>
+                <div class="flex flex-col sm:flex-row gap-4 mb-4">
+                    <div class="flex-1">
+                        <label for="sentimentFilter" class="block text-sm font-medium text-gray-700 mb-1">Filter by Sentiment:</label>
+                        <select id="sentimentFilter" class="input-field focus:ring-red-500 focus:border-red-500">
+                            <option value="All">All Sentiments</option>
+                            <option value="Positive">Positive</option>
+                            <option value="Neutral">Neutral</option>
+                            <option value="Negative">Negative</option>
+                            <option value="Mixed">Mixed</option>
+                        </select>
+                    </div>
+                    <div class="flex-1">
+                        <label for="categoryFilter" class="block text-sm font-medium text-gray-700 mb-1">Filter by Category:</label>
+                        <select id="categoryFilter" class="input-field focus:ring-red-500 focus:border-red-500">
+                            <option value="All">All Categories</option>
+                            <option value="Positive">Positive</option>
+                            <option value="Negative">Negative</option>
+                            <option value="Neutral/Other">Neutral/Other</option>
+                            <option value="Suggestion">Suggestion</option>
+                            <option value="Help">Help</option>
+                            <option value="Mixed">Mixed</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="commentsList" class="comment-list-container">
+                    <!-- Comments will be loaded here -->
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const analysisForm = document.getElementById('analysisForm');
+        const youtubeUrlInput = document.getElementById('youtube_url');
+        const analyzeButton = document.getElementById('analyzeButton');
+        const buttonText = document.getElementById('buttonText');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const videoInfo = document.getElementById('videoInfo');
+        const videoTitleSpan = document.getElementById('videoTitle');
+        const totalCommentsSpan = document.getElementById('totalComments');
+        const analysisMethodSpan = document.getElementById('analysisMethod');
+        const videoLink = document.getElementById('videoLink');
+        const errorMessageDiv = document.getElementById('errorMessage');
+        const errorText = document.getElementById('errorText');
+        const resultsSection = document.getElementById('resultsSection');
+        const overallInsightsDiv = document.getElementById('overallInsights');
+        const sentimentDistributionDiv = document.getElementById('sentimentDistribution');
+        const commentCategoriesDiv = document.getElementById('commentCategories');
+        const commentsListDiv = document.getElementById('commentsList');
+        const sentimentFilter = document.getElementById('sentimentFilter');
+        const categoryFilter = document.getElementById('categoryFilter');
+
+        let allCommentsData = []; // Store all fetched comments for filtering
+
+        // Function to safely display Markdown content
+        function displayMarkdown(element, markdownText) {
+            // Basic Markdown to HTML conversion for simplicity
+            // For production, consider a dedicated Markdown parser library
+            let html = markdownText
+                .replace(/^### (.*$)/gim, '<h3>$1</h3>') // H3
+                .replace(/^## (.*$)/gim, '<h2>$1</h2>')  // H2
+                .replace(/^# (.*$)/gim, '<h1>$1</h1>')   // H1
+                .replace(/^\* (.*$)/gim, '<li>$1</li>')  // Unordered list
+                .replace(/^- (.*$)/gim, '<li>$1</li>')   // Unordered list (hyphen)
+                .replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>') // Bold
+                .replace(/__(.*)__/gim, '<strong>$1</strong>')   // Bold
+                .replace(/\*(.*)\*/gim, '<em>$1</em>')     // Italic
+                .replace(/_(.*)_/gim, '<em>$1</em>')       // Italic
+                .replace(/\n/g, '<br>'); // Newlines to <br>
+
+            // Wrap list items in ul tags if they exist
+            if (html.includes('<li>')) {
+                html = html.replace(/<li>(.*?)<\/li>/g, '<li>$1</li>').replace(/(<li>.*?<\/li>)+/s, '<ul>$&</ul>');
+            }
+            element.innerHTML = html;
+        }
+
+        analysisForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorMessageDiv.classList.add('hidden');
+            resultsSection.style.display = 'none';
+            videoInfo.classList.add('hidden');
+            commentsListDiv.innerHTML = ''; // Clear previous comments
+
+            analyzeButton.disabled = true;
+            buttonText.textContent = 'Analyzing...';
+            loadingSpinner.classList.remove('hidden');
+
+            const youtubeUrl = youtubeUrlInput.value;
+            const formData = new FormData();
+            formData.append('youtube_url', youtubeUrl);
+
+            try {
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    allCommentsData = data.comments_data; // Store all data
+                    displayResults(data);
+                } else {
+                    errorText.textContent = data.error || 'An unknown error occurred.';
+                    errorMessageDiv.classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                errorText.textContent = 'Network error or server unreachable. Please try again.';
+                errorMessageDiv.classList.remove('hidden');
+            } finally {
+                analyzeButton.disabled = false;
+                buttonText.textContent = 'Analyze Comments';
+                loadingSpinner.classList.add('hidden');
+            }
+        });
+
+        function displayResults(data) {
+            resultsSection.style.display = 'block';
+            videoInfo.classList.remove('hidden');
+
+            videoTitleSpan.textContent = data.video_title;
+            totalCommentsSpan.textContent = data.total_comments;
+            analysisMethodSpan.textContent = data.analysis_method;
+            videoLink.href = data.youtube_url;
+
+            // Display Overall Insights
+            displayMarkdown(overallInsightsDiv, data.overall_insights);
+
+            // Display Sentiment Distribution
+            sentimentDistributionDiv.innerHTML = '';
+            for (const sentiment in data.overall_sentiment) {
+                const percentage = data.overall_sentiment[sentiment];
+                const colorClass = {
+                    'Positive': 'text-green-600',
+                    'Neutral': 'text-gray-600',
+                    'Negative': 'text-red-600',
+                    'Mixed': 'text-amber-600'
+                }[sentiment] || 'text-gray-600';
+                sentimentDistributionDiv.innerHTML += `
+                    <p class="flex justify-between items-center text-lg">
+                        <span class="${colorClass} font-semibold">${sentiment}:</span>
+                        <span class="font-bold">${percentage}%</span>
+                    </p>
+                `;
+            }
+
+            // Display Comment Categories
+            commentCategoriesDiv.innerHTML = '';
+            for (const category in data.comment_categories) {
+                const count = data.comment_categories[category];
+                commentCategoriesDiv.innerHTML += `
+                    <p class="flex justify-between items-center text-lg">
+                        <span class="text-gray-700">${category}:</span>
+                        <span class="font-bold">${count}</span>
+                    </p>
+                `;
+            }
+
+            // Populate filters and display comments
+            populateFilters(data.comments_data);
+            renderComments();
+        }
+
+        function populateFilters(comments) {
+            const uniqueSentiments = ['All', ...new Set(comments.map(c => c.sentiment))].sort();
+            const uniqueCategories = ['All', ...new Set(comments.map(c => c.category))].sort();
+
+            sentimentFilter.innerHTML = uniqueSentiments.map(s => `<option value="${s}">${s}</option>`).join('');
+            categoryFilter.innerHTML = uniqueCategories.map(c => `<option value="${c}">${c}</option>`).join('');
+        }
+
+        function renderComments() {
+            const selectedSentiment = sentimentFilter.value;
+            const selectedCategory = categoryFilter.value;
+
+            const filteredComments = allCommentsData.filter(comment => {
+                const matchesSentiment = selectedSentiment === 'All' || comment.sentiment === selectedSentiment;
+                const matchesCategory = selectedCategory === 'All' || comment.category === selectedCategory;
+                return matchesSentiment && matchesCategory;
+            });
+
+            commentsListDiv.innerHTML = '';
+            if (filteredComments.length === 0) {
+                commentsListDiv.innerHTML = '<p class="text-center text-gray-500 mt-8">No comments match the selected filters.</p>';
+                return;
+            }
+
+            filteredComments.forEach(comment => {
+                let sentimentClass = '';
+                switch (comment.sentiment) {
+                    case 'Positive': sentimentClass = 'positive'; break;
+                    case 'Negative': sentimentClass = 'negative'; break;
+                    case 'Neutral': sentimentClass = 'neutral'; break;
+                    case 'Mixed': sentimentClass = 'mixed'; break;
+                    default: sentimentClass = 'neutral'; break; // Fallback
+                }
+
+                let categoryLabel = comment.category;
+                let categoryClass = '';
+                switch (comment.category) {
+                    case 'Suggestion': categoryClass = 'suggestion'; break;
+                    case 'Help': categoryClass = 'help'; break;
+                    case 'Positive': categoryClass = 'positive'; break;
+                    case 'Negative': categoryClass = 'negative'; break;
+                    case 'Neutral/Other': categoryClass = 'neutral-other'; break;
+                    case 'Neutral': categoryClass = 'neutral'; break; // For Gemini output
+                    case 'Mixed': categoryClass = 'mixed'; break; // For Gemini output
+                    default: categoryClass = 'neutral-other'; break;
+                }
+
+                commentsListDiv.innerHTML += `
+                    <div class="comment-item ${sentimentClass} ${categoryClass}">
+                        <p class="text-sm text-gray-500 mb-1">
+                            <span class="font-semibold">Sentiment:</span> <span class="px-2 py-0.5 rounded-full text-xs font-medium ${sentimentClass === 'positive' ? 'bg-green-100 text-green-800' : sentimentClass === 'negative' ? 'bg-red-100 text-red-800' : sentimentClass === 'neutral' ? 'bg-gray-100 text-gray-800' : sentimentClass === 'mixed' ? 'bg-amber-100 text-amber-800' : ''}">${comment.sentiment}</span>
+                            <span class="ml-4 font-semibold">Category:</span> <span class="px-2 py-0.5 rounded-full text-xs font-medium ${categoryClass === 'suggestion' ? 'bg-blue-100 text-blue-800' : categoryClass === 'help' ? 'bg-purple-100 text-purple-800' : categoryClass === 'positive' ? 'bg-green-100 text-green-800' : categoryClass === 'negative' ? 'bg-red-100 text-red-800' : categoryClass === 'neutral' || categoryClass === 'neutral-other' ? 'bg-gray-100 text-gray-800' : categoryClass === 'mixed' ? 'bg-amber-100 text-amber-800' : ''}">${categoryLabel}</span>
+                        </p>
+                        <p class="text-gray-800">${comment.comment}</p>
+                    </div>
+                `;
+            });
+        }
+
+        sentimentFilter.addEventListener('change', renderComments);
+        categoryFilter.addEventListener('change', renderComments);
+    </script>
+</body>
+</html>

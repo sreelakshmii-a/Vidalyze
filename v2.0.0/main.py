@@ -170,7 +170,7 @@ async def analyze_sentiment_and_categorize(comments, gemini_api_key):
 
     # Split comments into batches to avoid hitting API request limits or context window limits
     # and to provide intermediate feedback.
-    batch_size = 50 # Adjust batch size based on API limits and comment length
+    batch_size = 100 # Adjust batch size based on API limits and comment length
     for i in range(0, len(comments), batch_size):
         batch = comments[i:i + batch_size]
         batch_prompt = "Analyze the sentiment of the following YouTube comments. For each comment, classify its sentiment as 'Positive', 'Neutral', 'Negative', or 'Mixed'. Provide the output as a JSON array of objects, where each object has 'comment' (the original comment text) and 'sentiment' fields.\n\nComments:\n" + "\n".join([f"- {c}" for c in batch])
@@ -342,9 +342,8 @@ async def main_vidalyze_flow(youtube_url):
 if __name__ == "__main__":
     # IMPORTANT: Replace with a YouTube video URL you want to analyze.
     # Ensure the video has comments.
-    example_youtube_url = "https://youtu.be/89WhKiUbB_w?si=_WlaXxivZvDTG8MZ" # Rick Astley - Never Gonna Give You Up
-    # Or test with a short video with fewer comments for quicker testing
-    # example_youtube_url = "https://www.youtube.com/watch?v=some_short_video_id"
+    url=input("Enter a Youtube URL: ")
+    example_youtube_url = url 
 
     # Run the main asynchronous flow
     asyncio.run(main_vidalyze_flow(example_youtube_url))

@@ -10,7 +10,7 @@
   Paste any YouTube link (standard or Shorts) and get started instantly.
 
 - 💬 **Fetch and Process Comments**  
-  Retrieves up to **500 top-level comments** from the selected video.
+  Retrieves **top-level comments** from the selected video.
 
 - 🧠 **Advanced Sentiment Analysis**  
   - **Primary Engine**: Uses **Google Gemini API** for **nuanced** sentiment classification: Positive, Neutral, Negative, or Mixed.  

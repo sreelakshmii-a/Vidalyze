@@ -49,7 +49,7 @@
 
 1.  **Clone the Repository**
     ```bash
-    git clone [https://github.com/sreelakshmii-a/vidalyze.git](https://github.com/sreelakshmii-a/vidalyze.git)
+    git clone (https://github.com/sreelakshmii-a/vidalyze.git)
     cd vidalyze
     ```
 2.  **Set Up Environment Variables**

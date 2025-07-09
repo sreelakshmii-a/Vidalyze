@@ -128,7 +128,7 @@ Open an issue or discussion on GitHub — and don’t forget to ⭐ the repo if 
 
 ---
 
-## 💡 Want More?
+## 💡 Want More assistance?
 
 Would you like help with:
 

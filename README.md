@@ -123,7 +123,7 @@ This project is licensed under the **MIT License**.
 
 ## 💬 Let's Connect
 
-Have questions, feedback, or cool ideas?  
+Have questions, feedback, or cool ideas?  Let's Collaborate!
 Open an issue or discussion on GitHub — and don’t forget to ⭐ the repo if it helped you!
 
 ---

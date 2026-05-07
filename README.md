@@ -1,6 +1,7 @@
 <p align="center">
   <img src="assets/banner.png" alt="Vidalyze Banner" />
 </p>
+
 # Vidalyze
 
 YouTube comment sentiment analyzer powered by Google Gemini AI — with TextBlob fallback, charts, dark mode, history, and a one-command Docker deployment.

@@ -37,6 +37,9 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Download TextBlob NLTK corpora
+        run: python -m textblob.download_corpora
+
       - name: Run pytest with coverage
         # API keys are intentionally empty — all external calls are mocked
         env:

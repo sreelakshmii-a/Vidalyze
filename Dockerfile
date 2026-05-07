@@ -32,7 +32,7 @@ COPY --from=deps /usr/local/bin/gunicorn /usr/local/bin/gunicorn
 
 # Copy only production source files — tests, legacy versions, and
 # the virtualenv are excluded by .dockerignore
-COPY app.py config.py youtube.py gemini.py sentiment.py ./
+COPY app.py config.py youtube.py gemini.py sentiment.py storage.py ./
 COPY templates/ templates/
 
 # Own everything as the non-root user

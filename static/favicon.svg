@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" shape-rendering="geometricPrecision">
+  <!-- Dark rounded-square background — slate-900 -->
+  <rect width="32" height="32" rx="7" fill="#0f172a"/>
+  <!-- Rose-600 play triangle, centred at (16,16) -->
+  <!-- Left edge: x=10, y=8→24 (16 px tall). Tip: x=24, y=16 -->
+  <path d="M10 8 L10 24 L24 16 Z" fill="#e11d48"/>
+  <!-- Thin inner accent bar — suggests "analytics" at larger render sizes -->
+  <rect x="10" y="26.5" width="14" height="2" rx="1" fill="#e11d48" opacity="0.35"/>
+</svg>

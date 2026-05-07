@@ -103,7 +103,8 @@ async def _call_gemini(prompt: str, api_key: str, schema=None) -> list | str | N
         }
 
     try:
-        async with aiohttp.ClientSession() as session:
+        timeout = aiohttp.ClientTimeout(total=60)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.post(url, json=payload) as resp:
                 if resp.status == 429:
                     body = await resp.json(content_type=None)

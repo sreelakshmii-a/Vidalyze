@@ -1,6 +1,6 @@
 [project]
 name = "vidalyze"
-version = "4.0.0"
+version = "5.0.0"
 description = "YouTube comment sentiment analyzer powered by Gemini AI"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -53,9 +53,6 @@ python_functions = ["test_*"]
 source = ["."]
 omit = [
     "tests/*",
-    "v1.0.0/*",
-    "v2.0.0/*",
-    "v3.0.0/*",
     "VID/*",
     "*/site-packages/*",
 ]

@@ -34,9 +34,14 @@ COPY --from=deps /usr/local/bin/gunicorn /usr/local/bin/gunicorn
 # the virtualenv are excluded by .dockerignore
 COPY app.py config.py youtube.py gemini.py sentiment.py storage.py ./
 COPY templates/ templates/
+COPY static/ static/
+
+# Persistent data directory for the SQLite database.
+# Mount a volume here in production so the DB survives container restarts.
+RUN mkdir -p /home/vidalyze/data
 
 # Own everything as the non-root user
-RUN chown -R vidalyze:vidalyze /home/vidalyze/app
+RUN chown -R vidalyze:vidalyze /home/vidalyze/app /home/vidalyze/data
 
 USER vidalyze
 
@@ -45,7 +50,8 @@ EXPOSE 5000
 ENV FLASK_DEBUG=false \
     LOG_LEVEL=INFO \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    DB_DIR=/home/vidalyze/data
 
 # 2 sync workers; timeout 120 s to allow Gemini batches to complete
 CMD ["gunicorn", \

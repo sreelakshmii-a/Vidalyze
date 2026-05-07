@@ -1,524 +1,995 @@
 <!DOCTYPE html>
-<html lang="en" class="light">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vidalyze — YouTube Comment Sentiment Analyzer</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+    <meta name="theme-color" content="#0f172a">
 
-    <!-- Tailwind dark-mode: class strategy -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
     <script>tailwind.config = { darkMode: 'class' }</script>
     <script src="https://cdn.tailwindcss.com"></script>
-
-    <!-- Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/wordcloud2.js/1.2.2/wordcloud2.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 
     <style>
-        /* ------------------------------------------------------------------ */
-        /* CSS custom properties — single toggle switches the whole theme      */
-        /* ------------------------------------------------------------------ */
+        /* ── Tokens ────────────────────────────────────────────────────── */
         :root {
-            --bg:           #f3f4f6;
-            --card:         #ffffff;
-            --shadow:       rgba(0,0,0,0.08);
-            --text:         #374151;
-            --text-muted:   #6b7280;
-            --border:       #d1d5db;
-            --input-bg:     #ffffff;
-            --meta-bg:      #f9fafb;
-            --insights-bg:  #f3f4f6;
-            --scrollbar:    #d1d5db;
-            --scrollbar-h:  #9ca3af;
+            --sb:      #ffffff;       /* sidebar bg          */
+            --main:    #f8fafc;       /* main pane bg        */
+            --card:    #ffffff;       /* card bg             */
+            --border:  #e2e8f0;
+            --text:    #0f172a;
+            --muted:   #64748b;
+            --accent:  #e11d48;
+            --accent2: #be123c;
+            --input:   #f8fafc;
+            --sub:     #f1f5f9;       /* subtle surface      */
         }
         .dark {
-            --bg:           #0f172a;
-            --card:         #1e293b;
-            --shadow:       rgba(0,0,0,0.4);
-            --text:         #e2e8f0;
-            --text-muted:   #94a3b8;
-            --border:       #334155;
-            --input-bg:     #1e293b;
-            --meta-bg:      #0f172a;
-            --insights-bg:  #0f172a;
-            --scrollbar:    #334155;
-            --scrollbar-h:  #475569;
+            --sb:      #111827;
+            --main:    #0d1117;
+            --card:    #161b22;
+            --border:  #21262d;
+            --text:    #e6edf3;
+            --muted:   #7d8590;
+            --accent:  #f43f5e;
+            --accent2: #e11d48;
+            --input:   #0d1117;
+            --sub:     #1c2128;
         }
 
-        /* ------------------------------------------------------------------ */
-        /* Base                                                                 */
-        /* ------------------------------------------------------------------ */
-        *, *::before, *::after { box-sizing: border-box; }
+        /* ── Reset ─────────────────────────────────────────────────────── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        /* ── App shell — desktop: two fixed-height panes ───────────────── */
+        html, body { height: 100%; }
+
+        @media (min-width: 1024px) {
+            html, body { overflow: hidden; }
+        }
+
         body {
-            font-family: 'Inter', system-ui, sans-serif;
-            background-color: var(--bg);
+            font-family: 'Geist', system-ui, sans-serif;
+            background: var(--main);
             color: var(--text);
-            transition: background-color 0.2s, color 0.2s;
-            padding: 1rem;
-        }
-        @media (min-width: 768px) { body { padding: 2rem; } }
-
-        /* ------------------------------------------------------------------ */
-        /* Cards                                                                */
-        /* ------------------------------------------------------------------ */
-        .card {
-            background-color: var(--card);
-            border-radius: 1rem;
-            box-shadow: 0 4px 12px var(--shadow);
-            padding: 1.5rem;
-            transition: background-color 0.2s, box-shadow 0.2s;
+            transition: background-color .2s, color .2s;
         }
 
-        /* ------------------------------------------------------------------ */
-        /* Form controls                                                         */
-        /* ------------------------------------------------------------------ */
-        .input-field {
-            border: 1px solid var(--border);
-            border-radius: 0.75rem;
-            padding: 0.75rem 1rem;
+        .shell {
+            display: flex;
+            flex-direction: column;
+            min-height: 100dvh;
+        }
+        @media (min-width: 1024px) {
+            .shell {
+                display: grid;
+                grid-template-columns: 288px 1fr;
+                height: 100dvh;
+                overflow: hidden;
+            }
+        }
+
+        /* ── Sidebar ────────────────────────────────────────────────────── */
+        .sidebar {
+            background: var(--sb);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+            padding: 1.25rem;
+            transition: background .2s;
+            overflow-y: auto;
+        }
+        @media (min-width: 1024px) {
+            .sidebar {
+                border-bottom: none;
+                border-right: 1px solid var(--border);
+                height: 100%;
+            }
+        }
+        .sidebar::-webkit-scrollbar { width: 4px; }
+        .sidebar::-webkit-scrollbar-track { background: transparent; }
+        .sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+        /* ── Main pane ──────────────────────────────────────────────────── */
+        .pane {
+            background: var(--main);
+            overflow-y: auto;
+            transition: background .2s;
+        }
+        @media (min-width: 1024px) {
+            .pane { height: 100%; }
+        }
+        .pane::-webkit-scrollbar { width: 5px; }
+        .pane::-webkit-scrollbar-track { background: transparent; }
+        .pane::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+        .pane-inner {
+            max-width: 860px;
+            margin: 0 auto;
+            padding: 1.5rem 1.25rem;
+        }
+        @media (min-width: 1280px) {
+            .pane-inner { padding: 2rem 2rem; }
+        }
+
+        /* ── Form controls ──────────────────────────────────────────────── */
+        .input {
             width: 100%;
-            background-color: var(--input-bg);
-            color: var(--text);
-            transition: background-color 0.2s, border-color 0.2s, color 0.2s;
-            outline: none;
-        }
-        .input-field:focus { border-color: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,0.15); }
-
-        /* ------------------------------------------------------------------ */
-        /* Buttons                                                              */
-        /* ------------------------------------------------------------------ */
-        .btn-primary {
-            background-color: #ef4444;
-            color: #fff;
-            padding: 0.75rem 1.5rem;
-            border-radius: 0.75rem;
-            font-weight: 600;
-            transition: background-color 0.15s, transform 0.1s;
-            border: none;
-            cursor: pointer;
-        }
-        .btn-primary:hover  { background-color: #dc2626; }
-        .btn-primary:active { transform: scale(0.98); }
-        .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
-
-        .btn-secondary {
-            background-color: transparent;
+            padding: .6rem .85rem;
             border: 1px solid var(--border);
-            color: var(--text-muted);
-            padding: 0.4rem 0.9rem;
-            border-radius: 0.6rem;
-            font-size: 0.8rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+            border-radius: .5rem;
+            background: var(--input);
+            color: var(--text);
+            font-family: inherit;
+            font-size: .875rem;
+            outline: none;
+            transition: border-color .15s, box-shadow .15s, background .2s;
+        }
+        .input::placeholder { color: var(--muted); }
+        .input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(225,29,72,.1);
+        }
+
+        .btn-g {
             display: inline-flex;
             align-items: center;
-            gap: 0.35rem;
+            gap: .375rem;
+            padding: .375rem .75rem;
+            border: 1px solid var(--border);
+            border-radius: .5rem;
+            background: transparent;
+            color: var(--muted);
+            font-family: inherit;
+            font-size: .78rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background .15s, color .15s, border-color .15s;
         }
-        .btn-secondary:hover { background-color: var(--meta-bg); color: var(--text); }
+        .btn-g:hover { background: var(--sub); color: var(--text); border-color: var(--muted); }
+        .btn-g:active { transform: scale(.98); }
 
-        /* ------------------------------------------------------------------ */
-        /* Dark mode toggle                                                     */
-        /* ------------------------------------------------------------------ */
+        /* ── Labels ─────────────────────────────────────────────────────── */
+        .lbl {
+            display: block;
+            font-size: .7rem;
+            font-weight: 700;
+            letter-spacing: .06em;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: .4rem;
+        }
+
+        /* ── Cards ──────────────────────────────────────────────────────── */
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: .75rem;
+            padding: 1.1rem 1.25rem;
+            transition: background .2s, border-color .2s;
+        }
+
+        /* ── Skeleton shimmer ───────────────────────────────────────────── */
+        .skel {
+            border-radius: .4rem;
+            background: linear-gradient(90deg, var(--border) 25%, var(--sub) 50%, var(--border) 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.4s infinite;
+        }
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+        /* ── Dark toggle (fixed) ────────────────────────────────────────── */
         #darkToggle {
             position: fixed;
-            top: 1rem;
-            right: 1rem;
-            width: 2.4rem;
-            height: 2.4rem;
-            border-radius: 50%;
+            top: .85rem;
+            right: .85rem;
+            z-index: 60;
+            width: 2.1rem;
+            height: 2.1rem;
+            border-radius: .5rem;
             border: 1px solid var(--border);
-            background: var(--card);
-            color: var(--text);
-            cursor: pointer;
+            background: var(--sb);
+            color: var(--muted);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.1rem;
-            transition: background-color 0.2s, border-color 0.2s;
-            z-index: 50;
+            cursor: pointer;
+            transition: background .15s, color .15s;
         }
-        #darkToggle:hover { background-color: var(--meta-bg); }
+        #darkToggle:hover { color: var(--text); background: var(--sub); }
 
-        /* ------------------------------------------------------------------ */
-        /* Loading spinner                                                      */
-        /* ------------------------------------------------------------------ */
-        .loading-spinner {
-            border: 3px solid rgba(255,255,255,0.3);
-            border-left-color: #fff;
+        /* ── Spinner ────────────────────────────────────────────────────── */
+        .spin {
+            width: 13px; height: 13px;
+            border: 2px solid rgba(255,255,255,.3);
+            border-top-color: #fff;
             border-radius: 50%;
-            width: 18px;
-            height: 18px;
-            animation: spin 0.75s linear infinite;
-            flex-shrink: 0;
+            animation: rot .6s linear infinite;
         }
-        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes rot { to { transform: rotate(360deg); } }
 
-        /* ------------------------------------------------------------------ */
-        /* Video info + insights panels                                         */
-        /* ------------------------------------------------------------------ */
-        .meta-panel {
-            background-color: var(--meta-bg);
-            border-radius: 0.75rem;
-            padding: 1rem;
-            transition: background-color 0.2s;
-        }
-        #overallInsights {
-            background-color: var(--insights-bg);
-            border-radius: 0.75rem;
-            padding: 1rem 1.25rem;
-            line-height: 1.7;
-            transition: background-color 0.2s;
-        }
-        #overallInsights h1, #overallInsights h2, #overallInsights h3 {
-            font-weight: 700;
-            margin: 0.75rem 0 0.35rem;
-        }
-        #overallInsights ul { list-style: disc; padding-left: 1.4rem; }
-        #overallInsights strong { font-weight: 700; }
-
-        /* ------------------------------------------------------------------ */
-        /* Charts                                                               */
-        /* ------------------------------------------------------------------ */
-        .chart-wrapper {
-            position: relative;
-            height: 230px;
+        /* ── History items ──────────────────────────────────────────────── */
+        .h-item {
+            display: flex;
+            align-items: flex-start;
+            gap: .45rem;
+            padding: .45rem .5rem;
+            border-radius: .45rem;
+            cursor: pointer;
+            background: none;
+            border: none;
+            color: var(--text);
+            font-family: inherit;
+            text-align: left;
             width: 100%;
+            transition: background .15s;
         }
+        .h-item:hover { background: var(--sub); }
 
-        /* ------------------------------------------------------------------ */
-        /* Comment list                                                         */
-        /* ------------------------------------------------------------------ */
-        .comment-list-container {
-            max-height: 600px;
-            overflow-y: auto;
-            padding-right: 0.4rem;
-        }
-        .comment-list-container::-webkit-scrollbar { width: 6px; }
-        .comment-list-container::-webkit-scrollbar-track { background: transparent; }
-        .comment-list-container::-webkit-scrollbar-thumb {
-            background: var(--scrollbar);
-            border-radius: 9999px;
-        }
-        .comment-list-container::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-h); }
-
-        .comment-item {
-            background-color: var(--meta-bg);
-            border-left: 4px solid transparent;
-            border-radius: 0.75rem;
-            padding: 0.9rem 1rem;
-            margin-bottom: 0.6rem;
-            transition: background-color 0.15s;
-        }
-        .comment-item.positive     { border-color: #22c55e; }
-        .comment-item.negative     { border-color: #ef4444; }
-        .comment-item.neutral      { border-color: #6b7280; }
-        .comment-item.mixed        { border-color: #f59e0b; }
-        .comment-item.suggestion   { border-color: #3b82f6; }
-        .comment-item.help         { border-color: #a855f7; }
-        .comment-item.neutral-other{ border-color: #9ca3af; }
-
-        /* ------------------------------------------------------------------ */
-        /* Badges                                                               */
-        /* ------------------------------------------------------------------ */
+        /* ── Badges ─────────────────────────────────────────────────────── */
         .badge {
             display: inline-flex;
             align-items: center;
-            gap: 0.2rem;
-            padding: 0.1rem 0.55rem;
+            gap: .15rem;
+            padding: .1rem .45rem;
             border-radius: 9999px;
-            font-size: 0.7rem;
+            font-size: .65rem;
             font-weight: 700;
-            letter-spacing: 0.02em;
+            letter-spacing: .02em;
         }
-        /* sentiment */
-        .badge-positive     { background: #dcfce7; color: #15803d; }
-        .badge-negative     { background: #fee2e2; color: #b91c1c; }
-        .badge-neutral      { background: #f3f4f6; color: #4b5563; }
-        .badge-mixed        { background: #fef3c7; color: #92400e; }
-        /* category */
-        .badge-suggestion   { background: #dbeafe; color: #1d4ed8; }
-        .badge-help         { background: #f3e8ff; color: #7e22ce; }
-        /* dark mode badge overrides */
-        .dark .badge-positive   { background: #14532d; color: #86efac; }
-        .dark .badge-negative   { background: #450a0a; color: #fca5a5; }
-        .dark .badge-neutral    { background: #1f2937; color: #9ca3af; }
-        .dark .badge-mixed      { background: #451a03; color: #fcd34d; }
-        .dark .badge-suggestion { background: #1e3a5f; color: #93c5fd; }
-        .dark .badge-help       { background: #2e1065; color: #d8b4fe; }
+        .bp  { background: #dcfce7; color: #15803d; }
+        .bn  { background: #fee2e2; color: #b91c1c; }
+        .bne { background: #f1f5f9; color: #475569; }
+        .bm  { background: #fef3c7; color: #92400e; }
+        .bs  { background: #dbeafe; color: #1d4ed8; }
+        .bh  { background: #f3e8ff; color: #7e22ce; }
+        .dark .bp  { background: #14532d; color: #86efac; }
+        .dark .bn  { background: #450a0a; color: #fca5a5; }
+        .dark .bne { background: #1e293b; color: #94a3b8; }
+        .dark .bm  { background: #451a03; color: #fcd34d; }
+        .dark .bs  { background: #1e3a5f; color: #93c5fd; }
+        .dark .bh  { background: #2e1065; color: #d8b4fe; }
 
-        /* ------------------------------------------------------------------ */
-        /* Highlights cards                                                     */
-        /* ------------------------------------------------------------------ */
-        .highlight-card {
-            background-color: var(--meta-bg);
-            border-radius: 0.75rem;
-            padding: 1rem;
-            transition: background-color 0.2s;
+        /* ── Comment items ──────────────────────────────────────────────── */
+        .cmt {
+            border-left: 3px solid transparent;
+            border-radius: .5rem;
+            padding: .7rem .875rem;
+            margin-bottom: .45rem;
+            background: var(--sub);
+            opacity: 0;
+            animation: fadein .3s ease forwards;
         }
-        .highlight-card-icon { font-size: 1.3rem; margin-bottom: 0.4rem; }
-        .highlight-card-title {
-            font-weight: 700;
-            font-size: 0.8rem;
-            letter-spacing: 0.04em;
-            color: var(--text-muted);
-            margin-bottom: 0.6rem;
+        .cmt.positive     { border-color: #22c55e; }
+        .cmt.negative     { border-color: #ef4444; }
+        .cmt.neutral      { border-color: #64748b; }
+        .cmt.mixed        { border-color: #f59e0b; }
+        .cmt.suggestion   { border-color: #3b82f6; }
+        .cmt.help         { border-color: #a855f7; }
+        .cmt.neutral-other{ border-color: #94a3b8; }
+        @keyframes fadein {
+            from { opacity: 0; transform: translateY(5px); }
+            to   { opacity: 1; transform: translateY(0); }
         }
-        .highlight-item {
-            font-size: 0.8rem;
+
+        /* ── Highlight cards ────────────────────────────────────────────── */
+        .hl-card { background: var(--sub); border-radius: .5rem; padding: .875rem; }
+        .hl-item {
+            font-size: .78rem;
             line-height: 1.45;
-            padding: 0.4rem 0.6rem;
-            border-radius: 0.5rem;
-            background-color: var(--card);
+            padding: .3rem .5rem;
+            border-radius: .375rem;
+            background: var(--card);
             color: var(--text);
-            margin-bottom: 0.4rem;
-            border-left: 3px solid var(--border);
-            transition: background-color 0.2s, border-color 0.2s;
+            margin-bottom: .3rem;
+            border-left: 2px solid var(--border);
         }
-        #insightsCard   .highlight-item { border-color: #22c55e; }
-        #complaintsCard .highlight-item { border-color: #ef4444; }
-        #requestsCard   .highlight-item { border-color: #3b82f6; }
+        #insightsCard   .hl-item { border-color: #22c55e; }
+        #complaintsCard .hl-item { border-color: #ef4444; }
+        #requestsCard   .hl-item { border-color: #3b82f6; }
 
-        /* ------------------------------------------------------------------ */
-        /* History panel                                                        */
-        /* ------------------------------------------------------------------ */
-        .history-item {
-            display: flex;
-            align-items: flex-start;
-            gap: 0.5rem;
-            padding: 0.6rem 0.7rem;
-            border-radius: 0.6rem;
-            cursor: pointer;
-            transition: background-color 0.15s;
-            text-align: left;
-            width: 100%;
-            border: none;
-            background: none;
-            color: var(--text);
+        /* ── Charts ─────────────────────────────────────────────────────── */
+        .chart-wrap { position: relative; height: 210px; width: 100%; }
+
+        /* ── Markdown output ────────────────────────────────────────────── */
+        #overallInsights { font-size: .875rem; line-height: 1.75; color: var(--text); }
+        #overallInsights h1, #overallInsights h2, #overallInsights h3 { font-weight: 700; margin: .65rem 0 .3rem; }
+        #overallInsights ul { list-style: disc; padding-left: 1.2rem; }
+        #overallInsights strong { font-weight: 700; }
+
+        /* ── Stat bars ──────────────────────────────────────────────────── */
+        .stat-row { display: flex; align-items: center; gap: .5rem; margin-bottom: .35rem; }
+        .stat-track { flex: 1; height: 4px; background: var(--border); border-radius: 9999px; overflow: hidden; }
+        .stat-fill  { height: 100%; border-radius: 9999px; }
+
+        /* ── Error banner ───────────────────────────────────────────────── */
+        .err {
+            background: #fff1f2;
+            border: 1px solid #fecdd3;
+            border-radius: .5rem;
+            padding: .7rem .875rem;
         }
-        .history-item:hover { background-color: var(--meta-bg); }
-        .history-thumb {
-            width: 36px;
-            height: 36px;
-            border-radius: 0.4rem;
-            background: var(--border);
-            flex-shrink: 0;
+        .dark .err { background: #450a0a; border-color: #7f1d1d; }
+
+        /* ── Empty state ────────────────────────────────────────────────── */
+        .empty {
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
-            font-size: 1rem;
+            min-height: 55dvh;
+            text-align: center;
         }
-        .history-title {
-            font-size: 0.75rem;
-            font-weight: 600;
-            line-height: 1.3;
-            overflow: hidden;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-        }
-        .history-meta { font-size: 0.68rem; color: var(--text-muted); margin-top: 0.15rem; }
 
-        /* ------------------------------------------------------------------ */
-        /* Misc                                                                 */
-        /* ------------------------------------------------------------------ */
-        .section-heading {
-            color: var(--text);
-            font-weight: 700;
-            font-size: 1.15rem;
+        /* ── Sidebar logo + nav ─────────────────────────────────────────── */
+        .sb-logo {
+            display: flex; align-items: center; gap: .6rem;
+            padding-bottom: 1.1rem; padding-right: 2.5rem;
+            border-bottom: 1px solid var(--border);
         }
-        .label-text { color: var(--text-muted); font-size: 0.8rem; font-weight: 600; }
+        .sb-brand { font-size: 1.05rem; font-weight: 800; letter-spacing: -.03em; color: var(--text); }
+        .sb-nav { display: flex; flex-direction: column; gap: .1rem; }
+        .nav-item {
+            display: flex; align-items: center; gap: .6rem;
+            padding: .475rem .6rem; border-radius: .5rem; border: none;
+            background: none; color: var(--muted); font-family: inherit;
+            font-size: .815rem; font-weight: 500; cursor: pointer;
+            text-align: left; width: 100%;
+            transition: background .15s, color .15s;
+        }
+        .nav-item:hover { background: var(--sub); color: var(--text); }
+        .nav-item.active { background: rgba(225,29,72,.1); color: var(--accent); font-weight: 600; }
+        .dark .nav-item.active { background: rgba(244,63,94,.15); }
+        .sb-divider { height: 1px; background: var(--border); }
+        #historyPanel { display: flex; flex-direction: column; gap: .4rem; flex: 1; overflow: hidden; }
+        #historyList  { flex: 1; overflow-y: auto; min-height: 0; }
+        #historyList::-webkit-scrollbar { width: 3px; }
+        #historyList::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        .view-all-btn {
+            display: flex; align-items: center; gap: .3rem; padding: .35rem .5rem;
+            border: none; background: none; color: var(--muted);
+            font-family: inherit; font-size: .72rem; font-weight: 500; cursor: pointer;
+            border-radius: .375rem; transition: color .15s, background .15s; width: 100%;
+        }
+        .view-all-btn:hover { color: var(--accent); background: var(--sub); }
 
-        /* Progress bar rows */
-        .stat-row { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.4rem; }
-        .stat-bar-track {
-            flex: 1;
-            height: 6px;
+        /* ── Analyze header (main pane) ──────────────────────────────────── */
+        .analyze-hd {
+            padding-bottom: 1.5rem; margin-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .analyze-hd h1 {
+            font-size: 1.3rem; font-weight: 800; letter-spacing: -.03em;
+            color: var(--text); margin-bottom: .2rem;
+        }
+        .analyze-sub { font-size: .8rem; color: var(--muted); margin-bottom: .875rem; }
+        .url-bar {
+            display: flex; align-items: center;
+            border: 1px solid var(--border); border-radius: .625rem;
+            background: var(--card); overflow: hidden;
+            transition: border-color .15s, box-shadow .15s;
+        }
+        .url-bar:focus-within {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(225,29,72,.1);
+        }
+        .url-bar-ico { padding: 0 .75rem; color: var(--muted); display: flex; flex-shrink: 0; }
+        .url-bar input {
+            flex: 1; min-width: 0; padding: .7rem 0;
+            background: transparent; color: var(--text);
+            font-family: inherit; font-size: .875rem;
+            outline: none; border: none;
+        }
+        .url-bar input::placeholder { color: var(--muted); }
+        .btn-analyze {
+            margin: .275rem .275rem .275rem 0; padding: .5rem .875rem;
+            background: var(--accent); color: #fff; border: none; border-radius: .4rem;
+            font-family: inherit; font-size: .8rem; font-weight: 600; cursor: pointer;
+            display: flex; align-items: center; gap: .4rem; flex-shrink: 0; white-space: nowrap;
+            transition: background .15s, transform .1s;
+        }
+        .btn-analyze:hover:not(:disabled) { background: var(--accent2); }
+        .btn-analyze:active:not(:disabled) { transform: scale(.98); }
+        .btn-analyze:disabled { opacity: .5; cursor: not-allowed; }
+        .example-hint { font-size: .7rem; color: var(--muted); margin-top: .45rem; }
+
+        /* ── Video info strip ────────────────────────────────────────────── */
+        .vid-strip {
+            display: flex; align-items: center; gap: .625rem;
+            padding: .55rem .75rem; background: var(--sub);
+            border: 1px solid var(--border); border-radius: .5rem;
+            margin-bottom: 1rem;
+        }
+
+        /* ── Stat cards ──────────────────────────────────────────────────── */
+        .stat-grid {
+            display: grid; grid-template-columns: repeat(2,1fr);
+            gap: .75rem; margin-bottom: 1.25rem;
+        }
+        @media (min-width: 600px) { .stat-grid { grid-template-columns: repeat(4,1fr); } }
+        .stat-card {
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: .75rem; padding: .875rem 1rem;
+            transition: background .2s, border-color .2s;
+        }
+        .stat-lbl {
+            font-size: .65rem; font-weight: 700; letter-spacing: .05em;
+            text-transform: uppercase; color: var(--muted); margin-bottom: .45rem;
+        }
+        .stat-val {
+            font-size: 1.55rem; font-weight: 800; letter-spacing: -.04em;
+            line-height: 1; margin-bottom: .25rem;
+        }
+        .stat-sub { font-size: .72rem; color: var(--muted); }
+
+        /* ── Sentiment card inner layout ───────────────────────────────── */
+        .sent-card-inner {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1rem;
+            align-items: center;
+        }
+        @media (min-width: 500px) {
+            .sent-card-inner { grid-template-columns: 165px 1fr; }
+        }
+
+        /* ── Topic bar rows ─────────────────────────────────────────────── */
+        .topic-row {
+            display: flex; align-items: center; gap: .75rem; margin-bottom: .6rem;
+        }
+        .topic-lbl {
+            font-size: .78rem; font-weight: 500; color: var(--text);
+            width: 5.5rem; flex-shrink: 0;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .topic-track {
+            flex: 1; height: 6px; background: var(--border);
+            border-radius: 9999px; overflow: hidden;
+        }
+        .topic-fill {
+            height: 100%; border-radius: 9999px; width: 0;
+            transition: width .9s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .topic-pct {
+            font-size: .72rem; color: var(--muted); width: 2.5rem;
+            text-align: right; flex-shrink: 0;
+        }
+
+        /* ── Recent comments strip ──────────────────────────────────────── */
+        .rcmt-item {
+            display: flex; align-items: flex-start; gap: .625rem;
+            padding: .5rem 0; border-bottom: 1px solid var(--border);
+        }
+        .rcmt-item:last-child { border-bottom: none; padding-bottom: 0; }
+        .rcmt-dot {
+            width: 7px; height: 7px; border-radius: 50%;
+            flex-shrink: 0; margin-top: .35rem;
+        }
+        .rcmt-text {
+            flex: 1; min-width: 0; font-size: .78rem; color: var(--text);
+            line-height: 1.45; overflow: hidden;
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+        }
+
+        /* ── Sentiment breakdown legend ─────────────────────────────────── */
+        .sent-row { margin-bottom: .625rem; }
+        .sent-row-top {
+            display: flex; align-items: center;
+            justify-content: space-between; margin-bottom: .2rem;
+        }
+        .sent-row-left  { display: flex; align-items: center; gap: .45rem; }
+        .sent-legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+        /* ── Page load overlay ──────────────────────────────────────────── */
+        #pageLoader {
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            background: var(--main);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: opacity .4s ease;
+        }
+        #pageLoader.fade-out { opacity: 0; pointer-events: none; }
+
+        .loader-dots { display: flex; gap: .35rem; }
+        .loader-dots span {
+            width: 6px; height: 6px;
+            background: var(--accent);
+            border-radius: 50%;
+            animation: ldot 1.2s ease-in-out infinite;
+        }
+        .loader-dots span:nth-child(2) { animation-delay: .2s; }
+        .loader-dots span:nth-child(3) { animation-delay: .4s; }
+        @keyframes ldot {
+            0%, 80%, 100% { transform: scale(.55); opacity: .35; }
+            40%            { transform: scale(1);   opacity: 1;   }
+        }
+
+        /* ── Analysis step progress ─────────────────────────────────────── */
+        .step-item { display: flex; align-items: flex-start; gap: .75rem; }
+        .step-connector {
+            width: 2px; height: 1.1rem;
             background: var(--border);
+            margin: .2rem 0 .2rem .375rem;
             border-radius: 9999px;
-            overflow: hidden;
         }
-        .stat-bar-fill { height: 100%; border-radius: 9999px; }
+        .step-dot {
+            width: 14px; height: 14px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            margin-top: .2rem;
+            transition: background .25s;
+        }
+        .step-dot.pending { background: var(--border); }
+        .step-dot.active  { background: var(--accent); animation: spulse 1.4s ease-in-out infinite; }
+        .step-dot.done    {
+            background: #22c55e;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M2.5 7l3 3 6-6' stroke='white' stroke-width='1.75' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+            background-size: 75%;
+            background-position: center;
+            background-repeat: no-repeat;
+        }
+        @keyframes spulse {
+            0%, 100% { box-shadow: 0 0 0 0   rgba(225,29,72,.5); }
+            50%       { box-shadow: 0 0 0 5px rgba(225,29,72,0);  }
+        }
     </style>
 </head>
 
 <body>
-    <!-- Dark mode toggle (fixed, top-right) -->
-    <button id="darkToggle" aria-label="Toggle dark mode" title="Toggle dark mode">🌙</button>
 
-    <div class="max-w-6xl mx-auto">
+    <!-- Page loader — covers everything until window.load fires -->
+    <div id="pageLoader" role="status" aria-label="Loading Vidalyze">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="52" height="52"
+             style="margin-bottom:.875rem;border-radius:9px;overflow:visible" aria-hidden="true">
+            <rect width="32" height="32" rx="7" fill="#0f172a"/>
+            <path d="M10 8 L10 24 L24 16 Z" fill="#e11d48"/>
+        </svg>
+        <p style="font-size:.95rem;font-weight:700;letter-spacing:-.02em;color:var(--text);margin-bottom:.75rem">Vidalyze</p>
+        <div class="loader-dots" aria-hidden="true">
+            <span></span><span></span><span></span>
+        </div>
+    </div>
 
-        <!-- ============================================================= -->
-        <!-- Header                                                          -->
-        <!-- ============================================================= -->
-        <header class="text-center mb-8 pt-2">
-            <h1 class="text-5xl font-extrabold mb-1" style="color:var(--text)">Vidalyze</h1>
-            <p style="color:var(--text-muted)" class="text-lg">YouTube Comment Sentiment &amp; Insight Analyzer</p>
-        </header>
+    <!-- Dark mode toggle -->
+    <button id="darkToggle" aria-label="Toggle dark mode">
+        <svg id="iconMoon" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg id="iconSun"  xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+    </button>
 
-        <!-- ============================================================= -->
-        <!-- Main grid                                                        -->
-        <!-- ============================================================= -->
-        <main class="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:items-start">
+    <div class="shell">
 
-            <!-- --------------------------------------------------------- -->
-            <!-- Left panel — Input + Video Info                             -->
-            <!-- --------------------------------------------------------- -->
-            <div class="lg:col-span-1 card flex flex-col gap-5">
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!--  SIDEBAR                                                      -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <aside class="sidebar">
 
-                <div>
-                    <h2 class="text-xl font-bold mb-4" style="color:var(--text)">Analyze a Video</h2>
-                    <form id="analysisForm" class="space-y-3">
-                        <div>
-                            <label for="youtube_url" class="label-text block mb-1">YouTube URL</label>
+            <!-- Logo -->
+            <div class="sb-logo">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="28" height="28"
+                     style="border-radius:6px;flex-shrink:0" aria-hidden="true">
+                    <rect width="32" height="32" rx="7" fill="#0f172a"/>
+                    <path d="M10 8 L10 24 L24 16 Z" fill="#e11d48"/>
+                </svg>
+                <p class="sb-brand">Vidalyze</p>
+            </div>
+
+            <!-- Navigation -->
+            <nav class="sb-nav" aria-label="Main navigation">
+                <button class="nav-item active" id="navDashboard" aria-current="page">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                    Dashboard
+                </button>
+                <button class="nav-item" id="navAllAnalyses">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                    All Analyses
+                </button>
+                <button class="nav-item" id="navSettings">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                    Settings
+                </button>
+            </nav>
+
+            <div class="sb-divider"></div>
+
+            <!-- Recent analyses -->
+            <div id="historyPanel" style="display:none">
+                <p class="lbl">Recent Analyses</p>
+                <div id="historyList" aria-label="Recent analyses"></div>
+                <button class="view-all-btn" id="viewAllBtn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                    View all analyses
+                </button>
+            </div>
+
+        </aside>
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!--  MAIN PANE                                                    -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <main class="pane" aria-live="polite">
+            <div class="pane-inner">
+
+                <!-- ── Always-visible analyze header ──────────────────── -->
+                <div class="analyze-hd">
+                    <h1>Analyze YouTube Comments</h1>
+                    <p class="analyze-sub">Understand what your audience is saying</p>
+                    <form id="analysisForm">
+                        <div class="url-bar">
+                            <span class="url-bar-ico" aria-hidden="true">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                            </span>
                             <input type="url" id="youtube_url" name="youtube_url"
-                                   placeholder="https://www.youtube.com/watch?v=…"
-                                   required class="input-field"
-                                   aria-label="YouTube video URL">
+                                   placeholder="Paste a YouTube video URL here…"
+                                   required aria-label="YouTube video URL" />
+                            <button type="submit" id="analyzeButton" class="btn-analyze" aria-label="Analyze comments">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                                <span id="buttonText">Analyze Comments</span>
+                                <div id="loadingSpinner" class="spin" style="display:none" role="status" aria-label="Analyzing"></div>
+                            </button>
                         </div>
-                        <button type="submit" id="analyzeButton"
-                                class="btn-primary w-full flex items-center justify-center gap-2"
-                                aria-label="Analyze comments">
-                            <span id="buttonText">Analyze Comments</span>
-                            <div id="loadingSpinner" class="loading-spinner hidden"
-                                 role="status" aria-live="polite" aria-label="Analyzing, please wait"></div>
-                        </button>
+                        <p class="example-hint">Example: https://www.youtube.com/watch?v=dQw4w9WgXcQ</p>
                     </form>
+                    <!-- Error lives here, below the input bar -->
+                    <div id="errorMessage" class="err" style="display:none;margin-top:.75rem" role="alert" aria-live="assertive">
+                        <p style="font-size:.825rem;font-weight:600;color:#be123c" id="errorText"></p>
+                    </div>
                 </div>
 
-                <!-- Video info (hidden until analysis completes) -->
-                <div id="videoInfo" class="meta-panel hidden" aria-live="polite">
-                    <p class="label-text mb-2">VIDEO DETAILS</p>
-                    <p class="font-semibold text-sm mb-1" style="color:var(--text)" id="videoTitle"></p>
-                    <div class="text-xs space-y-1" style="color:var(--text-muted)">
-                        <p>Comments: <strong id="totalComments" style="color:var(--text)"></strong></p>
-                        <p>Engine: <strong id="analysisMethod" style="color:var(--text)"></strong></p>
-                    </div>
+                <!-- ── Video info strip (shown after analysis) ────────── -->
+                <div id="videoInfo" class="vid-strip" style="display:none">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="22" height="22"
+                         style="border-radius:4px;flex-shrink:0" aria-hidden="true">
+                        <rect width="32" height="32" rx="6" fill="#0f172a"/>
+                        <path d="M10 8 L10 24 L24 16 Z" fill="#e11d48"/>
+                    </svg>
+                    <p id="videoTitle" style="flex:1;min-width:0;font-size:.8rem;font-weight:600;color:var(--text);overflow:hidden;white-space:nowrap;text-overflow:ellipsis"></p>
                     <a id="videoLink" href="#" target="_blank" rel="noopener noreferrer"
-                       class="text-red-500 hover:text-red-400 text-xs mt-2 block font-medium">
-                        View on YouTube ↗
+                       style="flex-shrink:0;display:inline-flex;align-items:center;gap:.2rem;color:var(--accent);font-size:.72rem;font-weight:500;text-decoration:none;white-space:nowrap">
+                        View on YouTube
+                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                     </a>
                 </div>
 
-                <!-- Error -->
-                <div id="errorMessage" class="hidden" role="alert"
-                     style="background:#fee2e2;border:1px solid #fca5a5;border-radius:0.75rem;padding:0.9rem">
-                    <p class="text-sm font-semibold" style="color:#b91c1c" id="errorText"></p>
-                </div>
-
-                <!-- History panel -->
-                <div id="historyPanel" class="hidden">
-                    <p class="label-text mb-2">RECENT ANALYSES</p>
-                    <div id="historyList" class="space-y-1" aria-label="Recent analyses"></div>
-                </div>
-
-            </div>
-
-            <!-- --------------------------------------------------------- -->
-            <!-- Right panel — Results                                       -->
-            <!-- --------------------------------------------------------- -->
-            <div class="lg:col-span-2 card" id="resultsSection" style="display:none;" aria-live="polite">
-
-                <!-- Section header + Export button -->
-                <div class="flex items-center justify-between mb-5">
-                    <h2 class="text-xl font-bold" style="color:var(--text)">Analysis Results</h2>
-                    <button id="exportBtn" class="btn-secondary" aria-label="Export comments to CSV">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                             stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
-                             aria-hidden="true">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                            <polyline points="7 10 12 15 17 10"/>
-                            <line x1="12" y1="15" x2="12" y2="3"/>
-                        </svg>
-                        Export CSV
-                    </button>
-                </div>
-
-                <!-- Overall Insights -->
-                <div class="mb-6">
-                    <p class="label-text mb-2">OVERALL INSIGHTS</p>
-                    <div id="overallInsights"></div>
-                </div>
-
-                <!-- AI Comment Highlights (Gemini only) -->
-                <div id="highlightsSection" class="mb-6 hidden">
-                    <p class="label-text mb-3">AI COMMENT HIGHLIGHTS</p>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <div class="highlight-card" id="insightsCard">
-                            <div class="highlight-card-icon">💡</div>
-                            <p class="highlight-card-title">KEY INSIGHTS</p>
-                            <div id="insightsList"></div>
+                <!-- ── Stat cards (shown after analysis) ─────────────── -->
+                <div id="statCards" style="display:none">
+                    <div class="stat-grid">
+                        <div class="stat-card">
+                            <p class="stat-lbl">Overall Sentiment</p>
+                            <p class="stat-val" id="statSentVal" style="color:#22c55e">—</p>
+                            <p class="stat-sub" id="statSentLbl"></p>
                         </div>
-                        <div class="highlight-card" id="complaintsCard">
-                            <div class="highlight-card-icon">⚠️</div>
-                            <p class="highlight-card-title">COMMON COMPLAINTS</p>
-                            <div id="complaintsList"></div>
+                        <div class="stat-card">
+                            <p class="stat-lbl">Total Comments</p>
+                            <p class="stat-val" style="color:var(--text)"><span id="totalComments">—</span></p>
+                            <p class="stat-sub">Analyzed</p>
                         </div>
-                        <div class="highlight-card" id="requestsCard">
-                            <div class="highlight-card-icon">🔧</div>
-                            <p class="highlight-card-title">FEATURE REQUESTS</p>
-                            <div id="requestsList"></div>
+                        <div class="stat-card">
+                            <p class="stat-lbl">Analysis Engine</p>
+                            <p class="stat-val" style="font-size:1rem;font-weight:700;color:var(--text)" id="analysisMethod">—</p>
+                            <p class="stat-sub" id="statEngineSub"></p>
+                        </div>
+                        <div class="stat-card">
+                            <p class="stat-lbl">Top Category</p>
+                            <p class="stat-val" style="font-size:1rem;font-weight:700;color:var(--text)" id="statCatVal">—</p>
+                            <p class="stat-sub" id="statCatSub"></p>
                         </div>
                     </div>
                 </div>
 
-                <!-- Charts — Sentiment donut + Category bar -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                    <div>
-                        <p class="label-text mb-3">SENTIMENT DISTRIBUTION</p>
-                        <div class="chart-wrapper">
-                            <canvas id="sentimentChart" aria-label="Sentiment distribution donut chart" role="img"></canvas>
+                <!-- Empty state -->
+                <div id="emptyState" class="empty">
+                    <div style="width:3rem;height:3rem;border-radius:.875rem;background:var(--card);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;margin-bottom:.875rem">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--muted)" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    </div>
+                    <p style="font-size:.95rem;font-weight:600;color:var(--text);margin-bottom:.3rem">No analysis yet</p>
+                    <p style="font-size:.8rem;color:var(--muted)">Paste a YouTube URL above and click Analyze.</p>
+                </div>
+
+                <!-- Loading skeleton + step progress -->
+                <div id="loadingState" style="display:none" aria-busy="true" aria-label="Analyzing video">
+
+                    <!-- Step progress indicator -->
+                    <div style="margin-bottom:1.5rem">
+                        <div class="step-item" id="step1">
+                            <div class="step-dot active"></div>
+                            <div>
+                                <p class="step-label" style="font-size:.825rem;font-weight:600;color:var(--text)">Fetching comments</p>
+                                <p style="font-size:.72rem;color:var(--muted);margin-top:.1rem">Connecting to YouTube API</p>
+                            </div>
+                        </div>
+                        <div class="step-connector"></div>
+                        <div class="step-item" id="step2">
+                            <div class="step-dot pending"></div>
+                            <div>
+                                <p class="step-label" style="font-size:.825rem;font-weight:400;color:var(--muted)">Running analysis</p>
+                                <p style="font-size:.72rem;color:var(--muted);margin-top:.1rem">Processing sentiment with AI</p>
+                            </div>
+                        </div>
+                        <div class="step-connector"></div>
+                        <div class="step-item" id="step3">
+                            <div class="step-dot pending"></div>
+                            <div>
+                                <p class="step-label" style="font-size:.825rem;font-weight:400;color:var(--muted)">Building insights</p>
+                                <p style="font-size:.72rem;color:var(--muted);margin-top:.1rem">Generating your report</p>
+                            </div>
                         </div>
                     </div>
-                    <div>
-                        <p class="label-text mb-3">COMMENT CATEGORIES</p>
-                        <div class="chart-wrapper">
-                            <canvas id="categoryChart" aria-label="Comment category bar chart" role="img"></canvas>
+
+                    <!-- Slow connection notice (appears after 9 s) -->
+                    <div id="slowNotice" style="display:none;background:var(--sub);border:1px solid var(--border);border-radius:.5rem;padding:.7rem .875rem;margin-bottom:1.25rem" role="status">
+                        <p style="font-size:.78rem;color:var(--muted)"><strong style="color:var(--text)">Taking longer than usual.</strong> Gemini analysis can take up to 30 s for large videos.</p>
+                    </div>
+
+                    <!-- Skeleton shimmer — preview of results layout -->
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
+                        <div class="skel" style="height:1.1rem;width:38%"></div>
+                        <div class="skel" style="height:1.75rem;width:6rem;border-radius:.5rem"></div>
+                    </div>
+                    <div class="card" style="margin-bottom:1rem">
+                        <div class="skel" style="height:.7rem;width:25%;margin-bottom:.75rem"></div>
+                        <div class="skel" style="height:.75rem;margin-bottom:.4rem"></div>
+                        <div class="skel" style="height:.75rem;width:80%;margin-bottom:.4rem"></div>
+                        <div class="skel" style="height:.75rem;width:60%"></div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
+                        <div class="card"><div class="skel" style="height:195px"></div></div>
+                        <div class="card"><div class="skel" style="height:195px"></div></div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
+                        <div class="card"><div class="skel" style="height:150px"></div></div>
+                        <div class="card"><div class="skel" style="height:150px"></div></div>
+                    </div>
+                    <div class="card" style="margin-bottom:1rem">
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+                            <div class="skel" style="height:2.25rem;border-radius:.5rem"></div>
+                            <div class="skel" style="height:2.25rem;border-radius:.5rem"></div>
                         </div>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:.45rem">
+                        <div class="skel" style="height:4rem;border-radius:.5rem"></div>
+                        <div class="skel" style="height:4rem;border-radius:.5rem"></div>
+                        <div class="skel" style="height:4rem;border-radius:.5rem"></div>
                     </div>
                 </div>
 
-                <!-- Filters + comment count -->
-                <div class="flex flex-col sm:flex-row gap-3 mb-1 items-end">
-                    <div class="flex-1">
-                        <label for="sentimentFilter" class="label-text block mb-1">Filter by Sentiment</label>
-                        <select id="sentimentFilter" class="input-field"
-                                aria-label="Filter comments by sentiment"></select>
-                    </div>
-                    <div class="flex-1">
-                        <label for="categoryFilter" class="label-text block mb-1">Filter by Category</label>
-                        <select id="categoryFilter" class="input-field"
-                                aria-label="Filter comments by category"></select>
-                    </div>
-                </div>
-                <p id="commentCount" class="text-xs mb-3" style="color:var(--text-muted)"></p>
+                <!-- Results -->
+                <div id="resultsSection" style="display:none">
 
-                <!-- Comment list -->
-                <div id="commentsList" class="comment-list-container" aria-live="polite" aria-label="Filtered comments"></div>
+                    <!-- Header -->
+                    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1.25rem">
+                        <div>
+                            <h2 style="font-size:1.05rem;font-weight:700;letter-spacing:-.02em;color:var(--text)">Analysis Results</h2>
+                            <p id="analysisSubtitle" style="font-size:.72rem;color:var(--muted);margin-top:.15rem"></p>
+                        </div>
+                        <button id="exportBtn" class="btn-g" aria-label="Export to CSV" style="flex-shrink:0">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            Export CSV
+                        </button>
+                    </div>
+
+                    <!-- Overall insights -->
+                    <div class="card" style="margin-bottom:1rem">
+                        <p class="lbl">Overall Insights</p>
+                        <div id="overallInsights"></div>
+                    </div>
+
+                    <!-- AI highlights (Gemini only) -->
+                    <div id="highlightsSection" style="display:none;margin-bottom:1rem">
+                        <p class="lbl">AI Comment Highlights</p>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.75rem">
+                            <div class="hl-card" id="insightsCard">
+                                <div style="display:flex;align-items:center;gap:.375rem;margin-bottom:.5rem">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                                    <p style="font-size:.65rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">Key Insights</p>
+                                </div>
+                                <div id="insightsList"></div>
+                            </div>
+                            <div class="hl-card" id="complaintsCard">
+                                <div style="display:flex;align-items:center;gap:.375rem;margin-bottom:.5rem">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                                    <p style="font-size:.65rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">Complaints</p>
+                                </div>
+                                <div id="complaintsList"></div>
+                            </div>
+                            <div class="hl-card" id="requestsCard">
+                                <div style="display:flex;align-items:center;gap:.375rem;margin-bottom:.5rem">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    <p style="font-size:.65rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">Feature Requests</p>
+                                </div>
+                                <div id="requestsList"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Row 1: Sentiment Analysis + Sentiment Over Time -->
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;margin-bottom:1rem">
+
+                        <!-- Sentiment Analysis: donut + breakdown legend -->
+                        <div class="card">
+                            <p class="lbl">Sentiment Analysis</p>
+                            <div class="sent-card-inner">
+                                <div style="position:relative;height:170px;width:100%">
+                                    <canvas id="sentimentChart" aria-label="Sentiment distribution donut chart" role="img"></canvas>
+                                </div>
+                                <div id="sentimentBreakdown"></div>
+                            </div>
+                        </div>
+
+                        <!-- Sentiment Over Time: area line chart -->
+                        <div class="card" id="timelineCard">
+                            <p class="lbl">Sentiment Over Time</p>
+                            <div style="position:relative;height:170px;width:100%">
+                                <canvas id="timelineChart" aria-label="Sentiment trend over time" role="img"></canvas>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Row 2: Top Topics + Word Cloud -->
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem;margin-bottom:1rem">
+
+                        <!-- Top Topics: HTML bar rows -->
+                        <div class="card">
+                            <p class="lbl">Top Topics</p>
+                            <div id="topicsRows"></div>
+                            <canvas id="categoryChart" style="display:none" aria-hidden="true"></canvas>
+                        </div>
+
+                        <!-- Word Cloud -->
+                        <div class="card" id="wordCloudCard">
+                            <p class="lbl">Most Used Words</p>
+                            <canvas id="wordCloudCanvas" style="width:100%;display:block"
+                                    aria-label="Word cloud of most used words" role="img"></canvas>
+                        </div>
+
+                    </div>
+
+                    <!-- Recent Comments card -->
+                    <div class="card" style="margin-bottom:1rem">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
+                            <p class="lbl" style="margin:0">Recent Comments</p>
+                            <button class="btn-g" id="scrollToAllBtn" style="font-size:.7rem" aria-label="Scroll to full comment list">
+                                View all
+                                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                            </button>
+                        </div>
+                        <div id="recentCmtsList"></div>
+                    </div>
+
+                    <!-- Filters -->
+                    <div class="card" style="margin-bottom:1rem">
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.6rem">
+                            <div>
+                                <label for="sentimentFilter" class="lbl">Sentiment</label>
+                                <select id="sentimentFilter" class="input" aria-label="Filter by sentiment"></select>
+                            </div>
+                            <div>
+                                <label for="categoryFilter" class="lbl">Category</label>
+                                <select id="categoryFilter" class="input" aria-label="Filter by category"></select>
+                            </div>
+                        </div>
+                        <p id="commentCount" style="font-size:.72rem;color:var(--muted)"></p>
+                    </div>
+
+                    <!-- Comment list — natural flow, main pane scrolls -->
+                    <div id="commentsList" aria-live="polite" aria-label="Filtered comments"></div>
+
+                </div>
 
             </div>
         </main>
-    </div>
 
-    <!-- ================================================================= -->
-    <!-- JavaScript                                                           -->
-    <!-- ================================================================= -->
+    </div><!-- .shell -->
+
+    <!-- ================================================================ -->
+    <!-- JavaScript                                                         -->
+    <!-- ================================================================ -->
     <script>
-    // Chart instances — declared first so applyTheme → refreshChartTheme can safely reference them
     let sentimentChartInst = null;
-    let categoryChartInst  = null;
+    let timelineChartInst  = null;
 
-    // -----------------------------------------------------------------------
-    // Theme management
-    // -----------------------------------------------------------------------
-    const html        = document.documentElement;
-    const darkToggle  = document.getElementById('darkToggle');
-    let   isDark      = localStorage.getItem('vidalyze-theme') === 'dark';
+    // ── Page loader ───────────────────────────────────────────────────
+    // Dismisses on window.load; 5 s safety timeout guards against CDN failure.
+    (function () {
+        const loader = document.getElementById('pageLoader');
+        if (!loader) return;
+        function dismiss() {
+            loader.classList.add('fade-out');
+            loader.addEventListener('transitionend', () => loader.remove(), { once: true });
+        }
+        const guard = setTimeout(dismiss, 5000);
+        window.addEventListener('load', function () {
+            clearTimeout(guard);
+            dismiss();
+        }, { once: true });
+    })();
+
+    // ── Analysis step progress ────────────────────────────────────────
+    let _stepTimers = [];
+    let _slowTimer  = null;
+
+    function setStepState(id, state) {
+        const item = document.getElementById(id);
+        if (!item) return;
+        const dot   = item.querySelector('.step-dot');
+        const label = item.querySelector('.step-label');
+        dot.className = `step-dot ${state}`;
+        label.style.color      = state === 'done'  ? '#22c55e'
+                               : state === 'active' ? 'var(--text)'
+                               : 'var(--muted)';
+        label.style.fontWeight = state === 'active' ? '600' : '400';
+    }
+
+    function startProgressSteps() {
+        _stepTimers.forEach(clearTimeout);
+        if (_slowTimer) clearTimeout(_slowTimer);
+        _stepTimers = [];
+        hide(document.getElementById('slowNotice'));
+        setStepState('step1', 'active');
+        setStepState('step2', 'pending');
+        setStepState('step3', 'pending');
+        _stepTimers.push(setTimeout(() => setStepState('step2', 'active'), 2500));
+        _stepTimers.push(setTimeout(() => setStepState('step3', 'active'), 6500));
+        _slowTimer = setTimeout(() => show(document.getElementById('slowNotice')), 9000);
+    }
+
+    function completeProgressSteps() {
+        _stepTimers.forEach(clearTimeout);
+        if (_slowTimer) clearTimeout(_slowTimer);
+        setStepState('step1', 'done');
+        setStepState('step2', 'done');
+        setStepState('step3', 'done');
+    }
+
+    // ── Session identity ──────────────────────────────────────────────
+    // A UUID persisted in localStorage ties this browser to its own
+    // history. Never sent to a third party — only used as an
+    // X-Session-Id header on requests to this server.
+    function _fallbackUUID() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+            const r = Math.random() * 16 | 0;
+            return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+        });
+    }
+    function getOrCreateSessionId() {
+        const KEY = 'vidalyze-sid';
+        try {
+            let sid = localStorage.getItem(KEY);
+            if (!sid) {
+                sid = (typeof crypto !== 'undefined' && crypto.randomUUID)
+                    ? crypto.randomUUID()
+                    : _fallbackUUID();
+                localStorage.setItem(KEY, sid);
+            }
+            return sid;
+        } catch { return ''; }
+    }
+    const SESSION_ID = getOrCreateSessionId();
+
+    // ── Theme ─────────────────────────────────────────────────────────
+    const html       = document.documentElement;
+    const darkToggle = document.getElementById('darkToggle');
+    const iconMoon   = document.getElementById('iconMoon');
+    const iconSun    = document.getElementById('iconSun');
+    let   isDark     = localStorage.getItem('vidalyze-theme') === 'dark';
 
     function applyTheme(dark) {
         isDark = dark;
         html.classList.toggle('dark', dark);
-        darkToggle.textContent = dark ? '☀️' : '🌙';
+        iconMoon.style.display = dark ? 'none'  : '';
+        iconSun.style.display  = dark ? ''      : 'none';
         darkToggle.title = dark ? 'Switch to light mode' : 'Switch to dark mode';
         localStorage.setItem('vidalyze-theme', dark ? 'dark' : 'light');
         refreshChartTheme();
@@ -526,16 +997,13 @@
 
     darkToggle.addEventListener('click', () => applyTheme(!isDark));
 
-    // Honour system preference on first visit
     if (!localStorage.getItem('vidalyze-theme')) {
         applyTheme(window.matchMedia('(prefers-color-scheme: dark)').matches);
     } else {
         applyTheme(isDark);
     }
 
-    // -----------------------------------------------------------------------
-    // DOM references
-    // -----------------------------------------------------------------------
+    // ── DOM refs ──────────────────────────────────────────────────────
     const analysisForm       = document.getElementById('analysisForm');
     const youtubeUrlInput    = document.getElementById('youtube_url');
     const analyzeButton      = document.getElementById('analyzeButton');
@@ -548,6 +1016,8 @@
     const videoLink          = document.getElementById('videoLink');
     const errorMessageDiv    = document.getElementById('errorMessage');
     const errorTextEl        = document.getElementById('errorText');
+    const emptyState         = document.getElementById('emptyState');
+    const loadingState       = document.getElementById('loadingState');
     const resultsSection     = document.getElementById('resultsSection');
     const overallInsightsDiv = document.getElementById('overallInsights');
     const sentimentFilter    = document.getElementById('sentimentFilter');
@@ -561,123 +1031,61 @@
     const insightsList       = document.getElementById('insightsList');
     const complaintsList     = document.getElementById('complaintsList');
     const requestsList       = document.getElementById('requestsList');
+    const analysisSubtitle   = document.getElementById('analysisSubtitle');
 
     let allCommentsData = [];
 
-    // -----------------------------------------------------------------------
-    // Lookup tables — single source of truth
-    // -----------------------------------------------------------------------
-    const SENTIMENT_CLASS = {
-        Positive: 'positive', Negative: 'negative',
-        Neutral:  'neutral',  Mixed:    'mixed',
-    };
-    const SENTIMENT_BADGE_CLASS = {
-        positive: 'badge-positive', negative: 'badge-negative',
-        neutral:  'badge-neutral',  mixed:    'badge-mixed',
-    };
-    const CATEGORY_CLASS = {
-        Suggestion: 'suggestion', Help: 'help',
-        Positive:   'positive',   Negative: 'negative',
-        'Neutral/Other': 'neutral-other', Neutral: 'neutral', Mixed: 'mixed',
-    };
-    const CATEGORY_BADGE_CLASS = {
-        suggestion:    'badge-suggestion', help:     'badge-help',
-        positive:      'badge-positive',   negative: 'badge-negative',
-        neutral:       'badge-neutral',    'neutral-other': 'badge-neutral',
-        mixed:         'badge-mixed',
-    };
-    // Sentiment icons supplement color — important for colorblind users
-    const SENTIMENT_ICON = {
-        Positive: '✓', Negative: '✗', Neutral: '●', Mixed: '±',
-    };
+    // ── Lookup tables ─────────────────────────────────────────────────
+    const SENT_CLASS = { Positive:'positive', Negative:'negative', Neutral:'neutral', Mixed:'mixed' };
+    const SENT_BADGE = { positive:'bp', negative:'bn', neutral:'bne', mixed:'bm' };
+    const CAT_CLASS  = { Suggestion:'suggestion', Help:'help', Positive:'positive',
+                         Negative:'negative', 'Neutral/Other':'neutral-other', Neutral:'neutral', Mixed:'mixed' };
+    const CAT_BADGE  = { suggestion:'bs', help:'bh', positive:'bp', negative:'bn',
+                         neutral:'bne', 'neutral-other':'bne', mixed:'bm' };
+    const SENT_ICON  = { Positive:'✓', Negative:'✗', Neutral:'●', Mixed:'±' };
+    const CHART_COLORS = { Positive:'#22c55e', Negative:'#ef4444', Neutral:'#64748b',
+                            Mixed:'#f59e0b', Suggestion:'#3b82f6', Help:'#a855f7' };
+    const DEFAULT_COLOR = '#94a3b8';
 
-    // Chart.js color palette
-    const CHART_COLORS = {
-        Positive:   '#22c55e', Negative:   '#ef4444',
-        Neutral:    '#6b7280', Mixed:      '#f59e0b',
-        Suggestion: '#3b82f6', Help:       '#a855f7',
-    };
-    const DEFAULT_CHART_COLOR = '#9ca3af';
-
-    // -----------------------------------------------------------------------
-    // Markdown (marked.js + DOMPurify)
-    // -----------------------------------------------------------------------
-    function renderMarkdown(element, md) {
-        element.innerHTML = DOMPurify.sanitize(marked.parse(md || ''));
+    // ── Markdown ──────────────────────────────────────────────────────
+    function renderMarkdown(el, md) {
+        el.innerHTML = DOMPurify.sanitize(marked.parse(md || ''));
     }
 
-    // -----------------------------------------------------------------------
-    // Charts
-    // -----------------------------------------------------------------------
+    // ── Charts ────────────────────────────────────────────────────────
     function chartDefaults() {
-        const textColor = isDark ? '#94a3b8' : '#6b7280';
-        const gridColor = isDark ? '#1e293b' : '#e5e7eb';
+        const textColor = isDark ? '#7d8590' : '#64748b';
+        const gridColor = isDark ? '#21262d' : '#e2e8f0';
         return { textColor, gridColor };
     }
 
-    function renderSentimentChart(sentimentData) {
+    function renderSentimentChart(data) {
         const { textColor } = chartDefaults();
         const canvas = document.getElementById('sentimentChart');
         if (sentimentChartInst) sentimentChartInst.destroy();
-
-        const labels = Object.keys(sentimentData);
-        const values = Object.values(sentimentData);
-        const colors = labels.map(l => CHART_COLORS[l] || DEFAULT_CHART_COLOR);
-
+        const labels = Object.keys(data);
+        const values = Object.values(data);
         sentimentChartInst = new Chart(canvas, {
             type: 'doughnut',
             data: {
                 labels,
-                datasets: [{ data: values, backgroundColor: colors, borderWidth: 2,
-                             borderColor: isDark ? '#1e293b' : '#ffffff', hoverOffset: 6 }],
+                datasets: [{
+                    data: values,
+                    backgroundColor: labels.map(l => CHART_COLORS[l] || DEFAULT_COLOR),
+                    borderWidth: 2,
+                    borderColor: isDark ? '#161b22' : '#ffffff',
+                    hoverOffset: 4,
+                }],
             },
             options: {
                 responsive: true, maintainAspectRatio: false, cutout: '65%',
                 plugins: {
                     legend: {
                         position: 'bottom',
-                        labels: { color: textColor, padding: 12, font: { size: 12, weight: '600' },
-                                  usePointStyle: true, pointStyleWidth: 8 },
+                        labels: { color: textColor, padding: 10, font: { size: 11, weight: '600' },
+                                  usePointStyle: true, pointStyleWidth: 7 },
                     },
-                    tooltip: {
-                        callbacks: {
-                            label: ctx => ` ${ctx.label}: ${ctx.parsed.toFixed(1)}%`
-                        },
-                    },
-                },
-            },
-        });
-    }
-
-    function renderCategoryChart(categoryData) {
-        const { textColor, gridColor } = chartDefaults();
-        const canvas = document.getElementById('categoryChart');
-        if (categoryChartInst) categoryChartInst.destroy();
-
-        const labels = Object.keys(categoryData);
-        const values = Object.values(categoryData);
-        const colors = labels.map(l => CHART_COLORS[l] || DEFAULT_CHART_COLOR);
-
-        categoryChartInst = new Chart(canvas, {
-            type: 'bar',
-            data: {
-                labels,
-                datasets: [{ data: values, backgroundColor: colors, borderWidth: 0,
-                             borderRadius: 4, barThickness: 18 }],
-            },
-            options: {
-                indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    x: {
-                        beginAtZero: true,
-                        ticks: { color: textColor, stepSize: 1, font: { size: 11 } },
-                        grid: { color: gridColor },
-                    },
-                    y: {
-                        ticks: { color: textColor, font: { size: 11, weight: '600' } },
-                        grid: { display: false },
-                    },
+                    tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed.toFixed(1)}%` } },
                 },
             },
         });
@@ -685,269 +1093,544 @@
 
     function refreshChartTheme() {
         const { textColor, gridColor } = chartDefaults();
-
-        [sentimentChartInst, categoryChartInst].forEach(chart => {
+        [sentimentChartInst, timelineChartInst].forEach(chart => {
             if (!chart) return;
-
             if (chart.config.type === 'doughnut') {
                 chart.options.plugins.legend.labels.color = textColor;
-                chart.data.datasets[0].borderColor = isDark ? '#1e293b' : '#ffffff';
+                chart.data.datasets[0].borderColor = isDark ? '#161b22' : '#ffffff';
             } else {
-                if (chart.options.scales?.x) {
-                    chart.options.scales.x.ticks.color = textColor;
-                    chart.options.scales.x.grid.color  = gridColor;
-                }
-                if (chart.options.scales?.y) {
-                    chart.options.scales.y.ticks.color = textColor;
-                }
+                if (chart.options.scales?.x) { chart.options.scales.x.ticks.color = textColor; chart.options.scales.x.grid.color = gridColor; }
+                if (chart.options.scales?.y) { chart.options.scales.y.ticks.color = textColor; }
+                if (chart.options.plugins?.legend) chart.options.plugins.legend.labels.color = textColor;
             }
             chart.update();
         });
     }
 
-    // -----------------------------------------------------------------------
-    // CSV Export
-    // -----------------------------------------------------------------------
-    exportBtn.addEventListener('click', () => {
-        if (!allCommentsData.length) return;
+    // ── Sentiment timeline (area line chart) ─────────────────────────
+    function renderSentimentTimeline(timelineData) {
+        const card   = document.getElementById('timelineCard');
+        const canvas = document.getElementById('timelineChart');
+        if (!canvas || !timelineData || timelineData.length < 2) {
+            if (card) card.style.display = 'none';
+            return;
+        }
+        if (card) card.style.display = '';
+        if (timelineChartInst) timelineChartInst.destroy();
+        const { textColor, gridColor } = chartDefaults();
 
-        const escape = s => `"${String(s).replace(/"/g, '""')}"`;
-        const header = ['Comment', 'Sentiment', 'Category'].map(escape).join(',');
-        const rows   = allCommentsData.map(c =>
-            [escape(c.comment), escape(c.sentiment), escape(c.category)].join(',')
-        );
-        // BOM (﻿) ensures Excel opens UTF-8 CSV correctly
-        const blob = new Blob(['﻿' + [header, ...rows].join('\r\n')],
-                              { type: 'text/csv;charset=utf-8;' });
-        const url  = URL.createObjectURL(blob);
-        const a    = document.createElement('a');
-        a.href     = url;
-        a.download = `vidalyze-export-${Date.now()}.csv`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        const n      = timelineData.length;
+        const labels = timelineData.map((_, i) =>
+            i === 0 ? 'Oldest' : i === n - 1 ? 'Newest' : '');
+
+        timelineChartInst = new Chart(canvas, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: 'Positive',
+                        data: timelineData.map(d => d.Positive),
+                        borderColor: '#22c55e',
+                        backgroundColor: 'rgba(34,197,94,0.12)',
+                        fill: true, tension: 0.4, borderWidth: 2,
+                        pointRadius: 2, pointHoverRadius: 4,
+                    },
+                    {
+                        label: 'Negative',
+                        data: timelineData.map(d => d.Negative),
+                        borderColor: '#ef4444',
+                        backgroundColor: 'rgba(239,68,68,0.07)',
+                        fill: true, tension: 0.4, borderWidth: 1.5,
+                        pointRadius: 2, pointHoverRadius: 4,
+                    },
+                ],
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: { color: textColor, font: { size: 11, weight: '600' },
+                                  usePointStyle: true, pointStyleWidth: 7 },
+                    },
+                    tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%` } },
+                },
+                scales: {
+                    x: { ticks: { color: textColor, font: { size: 10 }, maxRotation: 0 }, grid: { color: gridColor } },
+                    y: { min: 0, max: 100,
+                         ticks: { color: textColor, font: { size: 10 }, callback: v => v + '%' },
+                         grid: { color: gridColor } },
+                },
+            },
+        });
+    }
+
+    // ── Word cloud ────────────────────────────────────────────────────
+    function renderWordCloud(wordFreqs) {
+        const card   = document.getElementById('wordCloudCard');
+        const canvas = document.getElementById('wordCloudCanvas');
+        if (!canvas || !wordFreqs || !Object.keys(wordFreqs).length) {
+            if (card) card.style.display = 'none'; return;
+        }
+        if (typeof WordCloud === 'undefined') {
+            if (card) card.style.display = 'none'; return;
+        }
+        if (card) card.style.display = '';
+
+        const w = canvas.parentElement.clientWidth || 400;
+        canvas.width  = w;
+        canvas.height = 210;
+
+        const maxFreq = Math.max(...Object.values(wordFreqs));
+        const list = Object.entries(wordFreqs)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 50)
+            .map(([word, freq]) => [word, Math.max(10, Math.round(freq / maxFreq * 54))]);
+
+        const palette = isDark
+            ? ['#f43f5e','#94a3b8','#3b82f6','#22c55e','#f59e0b','#a78bfa']
+            : ['#e11d48','#64748b','#2563eb','#16a34a','#d97706','#7c3aed'];
+
+        WordCloud(canvas, {
+            list,
+            gridSize:     Math.round(w / 60),
+            weightFactor: 1,
+            fontFamily:   'Geist, system-ui, sans-serif',
+            color: word => palette[(word.charCodeAt(0) + word.charCodeAt(word.length - 1)) % palette.length],
+            backgroundColor: 'transparent',
+            rotateRatio: 0.25,
+            minSize:     8,
+            shuffle:     true,
+        });
+    }
+
+    // ── Stat cards ────────────────────────────────────────────────────
+    const SENT_COLORS = { Positive:'#22c55e', Negative:'#ef4444', Neutral:'#64748b', Mixed:'#f59e0b' };
+
+    function countUp(el, target, isFloat, duration) {
+        duration = duration || 700;
+        const t0 = performance.now();
+        (function frame(now) {
+            const p = Math.min((now - t0) / duration, 1);
+            const v = target * (1 - Math.pow(1 - p, 3));
+            el.textContent = isFloat ? v.toFixed(1) : Math.round(v).toLocaleString();
+            if (p < 1) requestAnimationFrame(frame);
+        })(t0);
+    }
+
+    function showStatCards(data) {
+        const statCards = document.getElementById('statCards');
+        show(statCards);
+
+        // Card 1 — dominant sentiment
+        const sentEntries = Object.entries(data.overall_sentiment).sort((a,b) => b[1]-a[1]);
+        const [topSentName, topSentPct] = sentEntries[0] || ['—', 0];
+        const sentColor = SENT_COLORS[topSentName] || 'var(--text)';
+        const sentValEl = document.getElementById('statSentVal');
+        sentValEl.style.color = sentColor;
+        sentValEl.textContent = '0%';
+        const sentLblEl = document.getElementById('statSentLbl');
+        sentLblEl.textContent = topSentName;
+        setTimeout(() => countUp({ set textContent(v) { sentValEl.textContent = v + '%'; } }, topSentPct, true), 80);
+
+        // Card 2 — total comments (count-up on existing #totalComments span)
+        totalCommentsEl.textContent = '0';
+        setTimeout(() => countUp(totalCommentsEl, data.total_comments, false), 120);
+
+        // Card 3 — engine (already set by displayResults; just add cached sub-text)
+        document.getElementById('statEngineSub').textContent = data.cached ? 'Cached result' : 'Live analysis';
+
+        // Card 4 — top category
+        const catEntries = Object.entries(data.comment_categories).sort((a,b) => b[1]-a[1]);
+        const [topCatName, topCatCount] = catEntries[0] || ['—', 0];
+        document.getElementById('statCatVal').textContent = topCatName;
+        const totalCmts = Object.values(data.comment_categories).reduce((s,n) => s+n, 0);
+        const catPct = totalCmts > 0 ? Math.round(topCatCount / totalCmts * 100) : 0;
+        document.getElementById('statCatSub').textContent = catPct + '% of comments';
+    }
+
+    function hideStatCards() {
+        hide(document.getElementById('statCards'));
+    }
+
+    // ── Nav click handlers ────────────────────────────────────────────
+    document.getElementById('navDashboard').addEventListener('click', function () {
+        ['navDashboard','navAllAnalyses','navSettings'].forEach(id => {
+            document.getElementById(id).classList.remove('active');
+            document.getElementById(id).removeAttribute('aria-current');
+        });
+        this.classList.add('active');
+        this.setAttribute('aria-current', 'page');
     });
 
-    // -----------------------------------------------------------------------
-    // Form submission
-    // -----------------------------------------------------------------------
+    document.getElementById('navAllAnalyses').addEventListener('click', function () {
+        ['navDashboard','navAllAnalyses','navSettings'].forEach(id => {
+            document.getElementById(id).classList.remove('active');
+            document.getElementById(id).removeAttribute('aria-current');
+        });
+        this.classList.add('active');
+        const hp = document.getElementById('historyPanel');
+        if (hp.style.display !== 'none') hp.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+
+    document.getElementById('navSettings').addEventListener('click', function () {
+        ['navDashboard','navAllAnalyses','navSettings'].forEach(id => {
+            document.getElementById(id).classList.remove('active');
+            document.getElementById(id).removeAttribute('aria-current');
+        });
+        this.classList.add('active');
+    });
+
+    // ── Export ────────────────────────────────────────────────────────
+    exportBtn.addEventListener('click', () => {
+        if (!allCommentsData.length) return;
+        const esc = s => `"${String(s).replace(/"/g, '""')}"`;
+        const hdr = ['Comment', 'Sentiment', 'Category'].map(esc).join(',');
+        const rows = allCommentsData.map(c => [esc(c.comment), esc(c.sentiment), esc(c.category)].join(','));
+        const blob = new Blob(['﻿' + [hdr, ...rows].join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href = url; a.download = `vidalyze-${Date.now()}.csv`;
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a); URL.revokeObjectURL(url);
+    });
+
+    // ── Form submit ───────────────────────────────────────────────────
     analysisForm.addEventListener('submit', async e => {
         e.preventDefault();
-        errorMessageDiv.classList.add('hidden');
-        resultsSection.style.display = 'none';
-        videoInfo.classList.add('hidden');
+        hide(errorMessageDiv);
+        hide(resultsSection);
+        hide(emptyState);
+        hide(videoInfo);
+        hideStatCards();
+        show(loadingState);
+        startProgressSteps();
         commentsListDiv.innerHTML = '';
 
         analyzeButton.disabled = true;
         buttonText.textContent  = 'Analyzing…';
-        loadingSpinner.classList.remove('hidden');
+        loadingSpinner.style.display = '';
 
         const fd = new FormData();
         fd.append('youtube_url', youtubeUrlInput.value.trim());
 
         try {
-            const res  = await fetch('/analyze', { method: 'POST', body: fd });
+            const res  = await fetch('/analyze', {
+                method: 'POST',
+                headers: { 'X-Session-Id': SESSION_ID },
+                body: fd,
+            });
             const data = await res.json();
             if (res.ok) {
                 allCommentsData = data.comments_data;
                 displayResults(data);
             } else {
-                showError(data.error || 'An unknown error occurred.');
+                showError(data.error || 'Unknown error.');
             }
-        } catch (err) {
-            console.error(err);
-            showError('Network error or server unreachable. Please try again.');
+        } catch {
+            showError('Network error. Please try again.');
         } finally {
             analyzeButton.disabled = false;
             buttonText.textContent  = 'Analyze Comments';
-            loadingSpinner.classList.add('hidden');
+            loadingSpinner.style.display = 'none';
+            completeProgressSteps();
+            hide(loadingState);
         }
     });
 
+    function show(el) { el.style.display = ''; }
+    function hide(el) { el.style.display = 'none'; }
+
     function showError(msg) {
         errorTextEl.textContent = msg;
-        errorMessageDiv.classList.remove('hidden');
+        show(errorMessageDiv);
     }
 
-    // -----------------------------------------------------------------------
-    // Results rendering
-    // -----------------------------------------------------------------------
+    // ── Results ───────────────────────────────────────────────────────
     function displayResults(data) {
-        resultsSection.style.display = 'block';
-        videoInfo.classList.remove('hidden');
+        hide(emptyState);
 
-        videoTitleEl.textContent      = data.video_title;
-        totalCommentsEl.textContent   = data.total_comments;
-        videoLink.href                = data.youtube_url;
-        analysisMethodEl.textContent  = data.analysis_method + (data.cached ? ' (cached)' : '');
+        // Video info strip
+        videoTitleEl.textContent = data.video_title;
+        videoLink.href           = data.youtube_url;
+        show(videoInfo);
+
+        // Stat cards with count-up animation
+        // analysisMethod span lives inside stat card 3 — set it before showStatCards
+        analysisMethodEl.textContent = data.analysis_method;
+        showStatCards(data);
+
+        // Results section
+        analysisSubtitle.textContent = data.video_title;
+        show(resultsSection);
 
         renderMarkdown(overallInsightsDiv, data.overall_insights);
         renderHighlights(data.highlights || { top_insights: [], top_complaints: [], feature_requests: [] });
         renderSentimentChart(data.overall_sentiment);
-        renderCategoryChart(data.comment_categories);
+        renderSentimentBreakdown(data.overall_sentiment, data.total_comments);
+        renderSentimentTimeline(data.sentiment_over_time || []);
+        renderTopicsRows(data.comment_categories);
+        renderWordCloud(data.word_frequencies || {});
+        renderRecentComments();
         populateFilters(data.comments_data);
         renderComments();
-        loadHistory(); // refresh history panel after each new analysis
+        loadHistory();
     }
 
-    // -----------------------------------------------------------------------
-    // Filters
-    // -----------------------------------------------------------------------
-    function buildOptions(select, values, allLabel) {
-        select.innerHTML = '';
-        values.forEach(val => {
-            const opt       = document.createElement('option');
-            opt.value       = val;
-            opt.textContent = val === 'All' ? allLabel : val;
-            select.appendChild(opt);
+    // ── Sentiment breakdown legend ────────────────────────────────────
+    function renderSentimentBreakdown(sentimentData, totalComments) {
+        const el = document.getElementById('sentimentBreakdown');
+        if (!el) return;
+        el.innerHTML = '';
+        const entries = Object.entries(sentimentData).sort((a, b) => b[1] - a[1]);
+        entries.forEach(([label, pct]) => {
+            const count = Math.round(pct / 100 * totalComments);
+            const color = CHART_COLORS[label] || DEFAULT_COLOR;
+
+            const row = document.createElement('div');
+            row.className = 'sent-row';
+
+            const top = document.createElement('div');
+            top.className = 'sent-row-top';
+
+            const left = document.createElement('div');
+            left.className = 'sent-row-left';
+
+            const dot = document.createElement('div');
+            dot.className = 'sent-legend-dot';
+            dot.style.background = color;
+
+            const name = document.createElement('span');
+            name.style.cssText = 'font-size:.78rem;font-weight:600;color:var(--text)';
+            name.textContent = label;
+
+            const right = document.createElement('span');
+            right.style.cssText = 'font-size:.75rem;color:var(--muted)';
+            right.textContent = `${pct.toFixed(1)}% (${count})`;
+
+            left.append(dot, name);
+            top.append(left, right);
+
+            const track = document.createElement('div');
+            track.style.cssText = 'height:5px;background:var(--border);border-radius:9999px;overflow:hidden';
+            const fill = document.createElement('div');
+            fill.style.cssText = `height:100%;border-radius:9999px;background:${color};width:0;transition:width .85s cubic-bezier(0.16,1,0.3,1)`;
+            track.appendChild(fill);
+
+            row.append(top, track);
+            el.appendChild(row);
+
+            requestAnimationFrame(() => requestAnimationFrame(() => { fill.style.width = pct + '%'; }));
+        });
+    }
+
+    // ── Top topics HTML bar rows ──────────────────────────────────────
+    function renderTopicsRows(categoryData) {
+        const el = document.getElementById('topicsRows');
+        if (!el) return;
+        el.innerHTML = '';
+        const total = Object.values(categoryData).reduce((s, n) => s + n, 0);
+        if (!total) return;
+        const entries = Object.entries(categoryData).sort((a, b) => b[1] - a[1]);
+        const maxCount = entries[0][1];
+        entries.forEach(([label, count]) => {
+            const pct     = Math.round(count / total * 100);
+            const barPct  = Math.round(count / maxCount * 100);
+            const color   = CHART_COLORS[label] || DEFAULT_COLOR;
+
+            const row = document.createElement('div');
+            row.className = 'topic-row';
+
+            const lbl = document.createElement('span');
+            lbl.className = 'topic-lbl';
+            lbl.textContent = label;
+
+            const track = document.createElement('div');
+            track.className = 'topic-track';
+            const fill = document.createElement('div');
+            fill.className = 'topic-fill';
+            fill.style.background = color;
+            track.appendChild(fill);
+
+            const pctEl = document.createElement('span');
+            pctEl.className = 'topic-pct';
+            pctEl.textContent = pct + '%';
+
+            row.append(lbl, track, pctEl);
+            el.appendChild(row);
+
+            requestAnimationFrame(() => requestAnimationFrame(() => { fill.style.width = barPct + '%'; }));
+        });
+    }
+
+    // ── Recent comments strip (top 5) ────────────────────────────────
+    const RCMT_COLORS = { positive:'#22c55e', negative:'#ef4444', neutral:'#64748b', mixed:'#f59e0b' };
+
+    function renderRecentComments() {
+        const el = document.getElementById('recentCmtsList');
+        if (!el) return;
+        el.innerHTML = '';
+        const recent = allCommentsData.slice(0, 5);
+        if (!recent.length) { el.style.display = 'none'; return; }
+        el.style.display = '';
+        recent.forEach(c => {
+            const sentCls   = SENT_CLASS[c.sentiment]  || 'neutral';
+            const badgeCls  = SENT_BADGE[sentCls]      || 'bne';
+            const dotColor  = RCMT_COLORS[sentCls]     || '#64748b';
+
+            const item = document.createElement('div');
+            item.className = 'rcmt-item';
+
+            const dot = document.createElement('div');
+            dot.className = 'rcmt-dot';
+            dot.style.background = dotColor;
+
+            const text = document.createElement('p');
+            text.className = 'rcmt-text';
+            text.textContent = c.comment;
+
+            const badge = document.createElement('span');
+            badge.className = `badge ${badgeCls}`;
+            badge.style.flexShrink = '0';
+            badge.textContent = c.sentiment;
+
+            item.append(dot, text, badge);
+            el.appendChild(item);
+        });
+    }
+
+    // Scroll-to-full-list handler
+    document.getElementById('scrollToAllBtn').addEventListener('click', () => {
+        document.getElementById('commentsList').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+
+    // ── Filters ───────────────────────────────────────────────────────
+    function buildOpts(sel, vals, allLabel) {
+        sel.innerHTML = '';
+        vals.forEach(v => {
+            const o = document.createElement('option');
+            o.value = v; o.textContent = v === 'All' ? allLabel : v;
+            sel.appendChild(o);
         });
     }
 
     function populateFilters(comments) {
-        const sentiments = ['All', ...new Set(comments.map(c => c.sentiment))].sort();
-        const categories = ['All', ...new Set(comments.map(c => c.category))].sort();
-        buildOptions(sentimentFilter, sentiments, 'All Sentiments');
-        buildOptions(categoryFilter,  categories, 'All Categories');
+        buildOpts(sentimentFilter, ['All', ...new Set(comments.map(c => c.sentiment))].sort(), 'All Sentiments');
+        buildOpts(categoryFilter,  ['All', ...new Set(comments.map(c => c.category))].sort(),  'All Categories');
     }
 
     sentimentFilter.addEventListener('change', renderComments);
-    categoryFilter.addEventListener('change', renderComments);
+    categoryFilter.addEventListener('change',  renderComments);
 
-    // -----------------------------------------------------------------------
-    // Comment rendering — full DOM API, no innerHTML for user content
-    // -----------------------------------------------------------------------
-    function buildBadge(text, badgeClass, icon) {
+    // ── Comment rendering ─────────────────────────────────────────────
+    function makeBadge(text, cls, icon) {
         const span = document.createElement('span');
-        span.className = `badge ${badgeClass}`;
+        span.className = `badge ${cls}`;
         if (icon) {
-            const iconSpan = document.createElement('span');
-            iconSpan.textContent = icon;
-            iconSpan.setAttribute('aria-hidden', 'true');
-            span.appendChild(iconSpan);
+            const i = document.createElement('span');
+            i.textContent = icon;
+            i.setAttribute('aria-hidden', 'true');
+            span.appendChild(i);
         }
-        const textNode = document.createTextNode(text);
-        span.appendChild(textNode);
+        span.appendChild(document.createTextNode(text));
         return span;
     }
 
-    function buildCommentElement(comment) {
-        const sentClass = SENTIMENT_CLASS[comment.sentiment]  || 'neutral';
-        const catClass  = CATEGORY_CLASS[comment.category]   || 'neutral-other';
-        const sentBadge = SENTIMENT_BADGE_CLASS[sentClass]   || 'badge-neutral';
-        const catBadge  = CATEGORY_BADGE_CLASS[catClass]     || 'badge-neutral';
-        const icon      = SENTIMENT_ICON[comment.sentiment]  || '';
+    function makeComment(c, idx) {
+        const sentCls  = SENT_CLASS[c.sentiment]  || 'neutral';
+        const catCls   = CAT_CLASS[c.category]    || 'neutral-other';
+        const sentBadge = SENT_BADGE[sentCls]     || 'bne';
+        const catBadge  = CAT_BADGE[catCls]       || 'bne';
 
-        const wrapper = document.createElement('div');
-        wrapper.className = `comment-item ${sentClass} ${catClass}`;
+        const wrap = document.createElement('div');
+        wrap.className = `cmt ${sentCls} ${catCls}`;
+        wrap.style.animationDelay = `${Math.min(idx * 35, 600)}ms`;
 
-        // Accessible: announce sentiment + category to screen readers
-        const srLabel = document.createElement('span');
-        srLabel.className   = 'sr-only';
-        srLabel.textContent = `${comment.sentiment} sentiment, ${comment.category} category. `;
+        const sr = document.createElement('span');
+        sr.className = 'sr-only';
+        sr.textContent = `${c.sentiment} sentiment, ${c.category} category. `;
 
         const meta = document.createElement('div');
-        meta.className = 'flex flex-wrap items-center gap-2 mb-2';
-        meta.setAttribute('aria-hidden', 'true'); // sr-label handles the text equivalent
+        meta.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin-bottom:.4rem';
+        meta.setAttribute('aria-hidden', 'true');
 
-        const sentLabel = document.createElement('span');
-        sentLabel.className   = 'text-xs font-semibold';
-        sentLabel.style.color = 'var(--text-muted)';
-        sentLabel.textContent = 'Sentiment';
-
-        const catLabel = document.createElement('span');
-        catLabel.className   = 'text-xs font-semibold';
-        catLabel.style.color = 'var(--text-muted)';
-        catLabel.textContent = 'Category';
-
-        meta.append(
-            sentLabel,
-            buildBadge(comment.sentiment, sentBadge, icon),
-            catLabel,
-            buildBadge(comment.category, catBadge, null),
-        );
+        const sl = document.createElement('span');
+        sl.style.cssText = 'font-size:.7rem;font-weight:600;color:var(--muted)';
+        sl.textContent = 'Sentiment';
+        const cl = document.createElement('span');
+        cl.style.cssText = 'font-size:.7rem;font-weight:600;color:var(--muted)';
+        cl.textContent = 'Category';
+        meta.append(sl, makeBadge(c.sentiment, sentBadge, SENT_ICON[c.sentiment] || ''), cl, makeBadge(c.category, catBadge, null));
 
         const body = document.createElement('p');
-        body.className   = 'text-sm leading-relaxed';
-        body.style.color = 'var(--text)';
-        body.textContent = comment.comment; // textContent — never innerHTML
+        body.style.cssText = 'font-size:.825rem;line-height:1.55;color:var(--text)';
+        body.textContent = c.comment;
 
-        wrapper.append(srLabel, meta, body);
-        return wrapper;
+        wrap.append(sr, meta, body);
+        return wrap;
     }
 
     function renderComments() {
-        const selSentiment = sentimentFilter.value;
-        const selCategory  = categoryFilter.value;
-
+        const ss = sentimentFilter.value;
+        const sc = categoryFilter.value;
         const filtered = allCommentsData.filter(c =>
-            (selSentiment === 'All' || c.sentiment === selSentiment) &&
-            (selCategory  === 'All' || c.category  === selCategory)
+            (ss === 'All' || c.sentiment === ss) &&
+            (sc === 'All' || c.category  === sc)
         );
 
         commentsListDiv.innerHTML = '';
-
         const total = allCommentsData.length;
         commentCountEl.textContent = filtered.length === total
             ? `Showing all ${total} comments`
             : `Showing ${filtered.length} of ${total} comments`;
 
-        if (filtered.length === 0) {
-            const empty = document.createElement('p');
-            empty.className   = 'text-center mt-8 text-sm';
-            empty.style.color = 'var(--text-muted)';
-            empty.textContent = 'No comments match the selected filters.';
-            commentsListDiv.appendChild(empty);
+        if (!filtered.length) {
+            const p = document.createElement('p');
+            p.style.cssText = 'text-align:center;padding:2rem 0;font-size:.825rem;color:var(--muted)';
+            p.textContent = 'No comments match the selected filters.';
+            commentsListDiv.appendChild(p);
             return;
         }
 
         const frag = document.createDocumentFragment();
-        filtered.forEach(c => frag.appendChild(buildCommentElement(c)));
-        commentsListDiv.appendChild(frag); // single reflow
+        filtered.forEach((c, i) => frag.appendChild(makeComment(c, i)));
+        commentsListDiv.appendChild(frag);
     }
 
-    // -----------------------------------------------------------------------
-    // AI Highlights
-    // -----------------------------------------------------------------------
-    function buildHighlightItem(text) {
+    // ── Highlights ────────────────────────────────────────────────────
+    function makeHlItem(text) {
         const el = document.createElement('div');
-        el.className = 'highlight-item';
-        el.textContent = text; // textContent — never innerHTML
+        el.className = 'hl-item';
+        el.textContent = text;
         return el;
     }
 
-    function renderHighlights(highlights) {
-        const hasAny = (
-            highlights.top_insights.length > 0 ||
-            highlights.top_complaints.length > 0 ||
-            highlights.feature_requests.length > 0
-        );
-        if (!hasAny) { highlightsSection.classList.add('hidden'); return; }
-        highlightsSection.classList.remove('hidden');
+    function renderHighlights(h) {
+        const hasAny = h.top_insights.length || h.top_complaints.length || h.feature_requests.length;
+        if (!hasAny) { hide(highlightsSection); return; }
+        show(highlightsSection);
 
-        const fill = (container, items, emptyMsg) => {
+        const fill = (container, items, msg) => {
             container.innerHTML = '';
             if (!items.length) {
-                const msg = document.createElement('p');
-                msg.className = 'text-xs'; msg.style.color = 'var(--text-muted)';
-                msg.textContent = emptyMsg; container.appendChild(msg);
+                const p = document.createElement('p');
+                p.style.cssText = 'font-size:.75rem;color:var(--muted)';
+                p.textContent = msg; container.appendChild(p);
             } else {
                 const f = document.createDocumentFragment();
-                items.forEach(t => f.appendChild(buildHighlightItem(t)));
+                items.forEach(t => f.appendChild(makeHlItem(t)));
                 container.appendChild(f);
             }
         };
-        fill(insightsList,   highlights.top_insights,     'No key insights found.');
-        fill(complaintsList, highlights.top_complaints,   'No common complaints found.');
-        fill(requestsList,   highlights.feature_requests, 'No feature requests found.');
+        fill(insightsList,   h.top_insights,     'No insights found.');
+        fill(complaintsList, h.top_complaints,   'No complaints found.');
+        fill(requestsList,   h.feature_requests, 'No requests found.');
     }
 
-    // -----------------------------------------------------------------------
-    // History panel
-    // -----------------------------------------------------------------------
-    function timeAgo(isoString) {
-        const diff = Date.now() - new Date(isoString).getTime();
-        const m = Math.floor(diff / 60000);
+    // ── History ───────────────────────────────────────────────────────
+    function timeAgo(iso) {
+        const m = Math.floor((Date.now() - new Date(iso)) / 60000);
         if (m < 1)  return 'just now';
         if (m < 60) return `${m}m ago`;
         const h = Math.floor(m / 60);
@@ -955,41 +1638,36 @@
         return `${Math.floor(h / 24)}d ago`;
     }
 
-    function buildHistoryItem(record) {
+    function makeHistoryItem(rec) {
         const btn = document.createElement('button');
-        btn.className = 'history-item';
-        btn.setAttribute('aria-label', `Re-analyze: ${record.video_title}`);
-        btn.title = 'Click to re-analyze this video';
+        btn.className = 'h-item';
+        btn.setAttribute('aria-label', `Re-analyze: ${rec.video_title}`);
 
-        const thumb = document.createElement('div');
-        thumb.className = 'history-thumb';
-        thumb.setAttribute('aria-hidden', 'true');
-        thumb.textContent = '▶';
+        const icon = document.createElement('div');
+        icon.style.cssText = 'width:2rem;height:2rem;border-radius:.375rem;background:var(--sub);border:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center';
+        icon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--muted)" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
 
         const info = document.createElement('div');
         info.style.minWidth = '0';
 
         const title = document.createElement('div');
-        title.className = 'history-title';
-        title.textContent = record.video_title || 'Unknown video';
+        title.style.cssText = 'font-size:.75rem;font-weight:600;line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;color:var(--text)';
+        title.textContent = rec.video_title || 'Unknown video';
 
         const meta = document.createElement('div');
-        meta.className = 'history-meta';
-        const topSentiment = Object.entries(record.overall_sentiment || {})
-            .sort((a, b) => b[1] - a[1])[0];
-        const sentStr = topSentiment ? `${topSentiment[0]} ${topSentiment[1]}%` : '';
+        meta.style.cssText = 'font-size:.67rem;color:var(--muted);margin-top:.1rem';
+        const top = Object.entries(rec.overall_sentiment || {}).sort((a,b) => b[1]-a[1])[0];
         meta.textContent = [
-            record.total_comments ? `${record.total_comments} comments` : '',
-            sentStr,
-            timeAgo(record.created_at),
+            rec.total_comments ? `${rec.total_comments} comments` : '',
+            top ? `${top[0]} ${top[1]}%` : '',
+            timeAgo(rec.created_at),
         ].filter(Boolean).join(' · ');
 
         info.append(title, meta);
-        btn.append(thumb, info);
+        btn.append(icon, info);
 
-        // Clicking fills the URL and re-submits the form (cache hit = instant)
         btn.addEventListener('click', () => {
-            youtubeUrlInput.value = record.youtube_url;
+            youtubeUrlInput.value = rec.youtube_url;
             analysisForm.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
         });
         return btn;
@@ -997,20 +1675,22 @@
 
     async function loadHistory() {
         try {
-            const res = await fetch('/history');
+            const res = await fetch('/history', {
+                headers: { 'X-Session-Id': SESSION_ID },
+            });
             if (!res.ok) return;
-            const records = await res.json();
-            if (!records.length) return;
+            const recs = await res.json();
+            if (!recs.length) return;
             historyList.innerHTML = '';
             const f = document.createDocumentFragment();
-            records.forEach(r => f.appendChild(buildHistoryItem(r)));
+            recs.forEach(r => f.appendChild(makeHistoryItem(r)));
             historyList.appendChild(f);
-            historyPanel.classList.remove('hidden');
-        } catch { /* history is non-critical */ }
+            show(historyPanel);
+        } catch { /* non-critical */ }
     }
 
-    // Load history on page load; refresh silently after each analysis
     loadHistory();
     </script>
+
 </body>
 </html>

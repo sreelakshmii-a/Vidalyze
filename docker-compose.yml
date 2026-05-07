@@ -10,6 +10,11 @@ services:
     environment:
       - FLASK_DEBUG=false
       - LOG_LEVEL=INFO
+      - DB_DIR=/home/vidalyze/data
+    volumes:
+      # Named volume keeps the SQLite database alive across container restarts
+      # and image rebuilds. Without this every redeploy wipes all history.
+      - vidalyze_data:/home/vidalyze/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/')"]
@@ -17,3 +22,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+
+volumes:
+  vidalyze_data:

@@ -1,4 +1,5 @@
 import logging
+import re
 from collections import Counter
 
 from textblob import TextBlob
@@ -115,6 +116,61 @@ def generate_insights_fallback(categorized_comments: list[dict]) -> str:
 
     lines.append("\n_For AI-powered insights, configure your GEMINI_API_KEY._")
     return "\n".join(lines)
+
+
+_STOPWORDS = frozenset({
+    "the","a","an","and","or","but","in","on","at","to","for","of","with",
+    "is","it","this","that","was","are","be","have","has","had","do","did",
+    "will","would","could","should","may","might","i","you","he","she","we",
+    "they","me","him","her","us","them","my","your","his","our","their","its",
+    "what","which","who","when","where","how","if","not","no","so","as","by",
+    "from","up","out","about","into","then","than","more","also","just","like",
+    "get","got","can","been","were","am","s","t","re","ve","ll","d","im",
+    "very","really","much","many","some","any","all","most","well","even",
+    "video","watch","time","make","one","know","see","good","great","love",
+    "comment","channel","please","think","want","need","still","back","thing",
+})
+
+
+def compute_word_frequencies(categorized_comments: list[dict], top_n: int = 60) -> dict:
+    """
+    Returns the top_n most frequent meaningful words across all comments.
+    Tokenises with a simple regex, filters short words and common stopwords.
+    No external dependencies required.
+    """
+    words: list[str] = []
+    for item in categorized_comments:
+        tokens = re.findall(r"[a-z]+", item.get("comment", "").lower())
+        words.extend(t for t in tokens if len(t) > 3 and t not in _STOPWORDS)
+    return dict(Counter(words).most_common(top_n))
+
+
+def compute_sentiment_timeline(
+    categorized_comments: list[dict], chunk_size: int = 20
+) -> list[dict]:
+    """
+    Batches comments into chunks of chunk_size (oldest → newest) and returns
+    the sentiment percentage breakdown per chunk.
+
+    YouTube returns comments newest-first, so the list is reversed before
+    chunking to produce a chronological timeline.
+    """
+    ordered = list(reversed(categorized_comments))
+    chunks: list[dict] = []
+    for i in range(0, len(ordered), chunk_size):
+        batch = ordered[i : i + chunk_size]
+        if not batch:
+            continue
+        counts = Counter(item.get("sentiment", "Neutral") for item in batch)
+        total  = len(batch)
+        chunks.append({
+            "chunk":    len(chunks) + 1,
+            "Positive": round(counts.get("Positive", 0) / total * 100, 1),
+            "Neutral":  round(counts.get("Neutral",  0) / total * 100, 1),
+            "Negative": round(counts.get("Negative", 0) / total * 100, 1),
+            "Mixed":    round(counts.get("Mixed",    0) / total * 100, 1),
+        })
+    return chunks
 
 
 def compute_stats(categorized_comments: list[dict]) -> tuple[dict, dict]:

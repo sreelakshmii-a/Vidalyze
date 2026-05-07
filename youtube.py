@@ -1,5 +1,6 @@
 import logging
 import re
+from urllib.parse import urlparse
 
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -28,7 +29,6 @@ def get_video_id(url: str) -> str | None:
         return None
 
     # Reject URLs that aren't from YouTube at all
-    from urllib.parse import urlparse
     try:
         parsed = urlparse(url if url.startswith("http") else f"https://{url}")
         if parsed.netloc and parsed.netloc not in _YOUTUBE_HOSTS:

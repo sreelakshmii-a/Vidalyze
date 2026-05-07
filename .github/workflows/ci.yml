@@ -50,8 +50,7 @@ jobs:
             --tb=short \
             --cov=. \
             --cov-report=term-missing \
-            --cov-report=xml \
-            --cov-omit="tests/*,v1.0.0/*,v2.0.0/*,v3.0.0/*,VID/*"
+            --cov-report=xml
 
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.11'

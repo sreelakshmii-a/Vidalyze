@@ -92,7 +92,7 @@ vidalyze/
 ### Step 3 — Clone and set up
 
 ```bash
-git clone https://github.com/alensomaxx/vidalyze.git
+git clone https://github.com/sreelakshmii-a/vidalyze.git
 cd vidalyze
 python -m venv venv
 

@@ -1,0 +1,48 @@
+# Version control
+.git/
+.gitignore
+
+# Secrets — NEVER bake into the image
+.env
+*.env
+
+# Legacy version directories (historical reference only)
+v1.0.0/
+v2.0.0/
+v3.0.0/
+
+# Python virtual environment
+VID/
+venv/
+.venv/
+env/
+
+# Test suite (not needed in production container)
+tests/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Editor / OS artifacts
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Documentation (saves image space)
+*.md
+AUDIT.md
+
+# CI / tooling config (not needed at runtime)
+.github/
+Makefile
+pyproject.toml

@@ -1,0 +1,19 @@
+services:
+  web:
+    build:
+      context: .
+      target: production
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env          # copy .env.example → .env and fill in your keys
+    environment:
+      - FLASK_DEBUG=false
+      - LOG_LEVEL=INFO
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

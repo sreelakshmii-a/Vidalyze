@@ -1,0 +1,71 @@
+[project]
+name = "vidalyze"
+version = "4.0.0"
+description = "YouTube comment sentiment analyzer powered by Gemini AI"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+
+# ─────────────────────────────────────────────
+# Ruff — linting & formatting
+# ─────────────────────────────────────────────
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes (undefined names, unused imports, etc.)
+    "I",    # isort (import ordering)
+    "UP",   # pyupgrade (modernise syntax)
+    "B",    # flake8-bugbear (common bugs & design issues)
+    "N",    # pep8-naming
+]
+ignore = [
+    "E501",   # line too long — handled by line-length setting above
+    "B008",   # function call in default argument (false positive with Flask)
+    "N806",   # variable in function should be lowercase (conflicts with acronyms)
+    "UP007",  # use X | Y instead of Union[X, Y] — keeping compat with 3.10
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["config", "youtube", "gemini", "sentiment"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]   # assert is fine in tests
+
+# ─────────────────────────────────────────────
+# Pytest
+# ─────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths   = ["tests"]
+addopts     = "-v --tb=short"
+python_files    = ["test_*.py"]
+python_classes  = ["Test*"]
+python_functions = ["test_*"]
+
+# ─────────────────────────────────────────────
+# Coverage
+# ─────────────────────────────────────────────
+[tool.coverage.run]
+source = ["."]
+omit = [
+    "tests/*",
+    "v1.0.0/*",
+    "v2.0.0/*",
+    "v3.0.0/*",
+    "VID/*",
+    "*/site-packages/*",
+]
+
+[tool.coverage.report]
+show_missing  = true
+skip_covered  = false
+fail_under    = 60    # CI fails if coverage drops below 60 %
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]

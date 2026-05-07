@@ -1,0 +1,41 @@
+# Environment — NEVER commit real keys
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+VID/
+env/
+
+# Testing & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# SQLite database (auto-created at runtime — never commit)
+*.db
+*.sqlite3
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code memory (local only)
+.claude/

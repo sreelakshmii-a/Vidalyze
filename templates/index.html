@@ -1,0 +1,1016 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vidalyze — YouTube Comment Sentiment Analyzer</title>
+
+    <!-- Tailwind dark-mode: class strategy -->
+    <script>tailwind.config = { darkMode: 'class' }</script>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+
+    <style>
+        /* ------------------------------------------------------------------ */
+        /* CSS custom properties — single toggle switches the whole theme      */
+        /* ------------------------------------------------------------------ */
+        :root {
+            --bg:           #f3f4f6;
+            --card:         #ffffff;
+            --shadow:       rgba(0,0,0,0.08);
+            --text:         #374151;
+            --text-muted:   #6b7280;
+            --border:       #d1d5db;
+            --input-bg:     #ffffff;
+            --meta-bg:      #f9fafb;
+            --insights-bg:  #f3f4f6;
+            --scrollbar:    #d1d5db;
+            --scrollbar-h:  #9ca3af;
+        }
+        .dark {
+            --bg:           #0f172a;
+            --card:         #1e293b;
+            --shadow:       rgba(0,0,0,0.4);
+            --text:         #e2e8f0;
+            --text-muted:   #94a3b8;
+            --border:       #334155;
+            --input-bg:     #1e293b;
+            --meta-bg:      #0f172a;
+            --insights-bg:  #0f172a;
+            --scrollbar:    #334155;
+            --scrollbar-h:  #475569;
+        }
+
+        /* ------------------------------------------------------------------ */
+        /* Base                                                                 */
+        /* ------------------------------------------------------------------ */
+        *, *::before, *::after { box-sizing: border-box; }
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            transition: background-color 0.2s, color 0.2s;
+            padding: 1rem;
+        }
+        @media (min-width: 768px) { body { padding: 2rem; } }
+
+        /* ------------------------------------------------------------------ */
+        /* Cards                                                                */
+        /* ------------------------------------------------------------------ */
+        .card {
+            background-color: var(--card);
+            border-radius: 1rem;
+            box-shadow: 0 4px 12px var(--shadow);
+            padding: 1.5rem;
+            transition: background-color 0.2s, box-shadow 0.2s;
+        }
+
+        /* ------------------------------------------------------------------ */
+        /* Form controls                                                         */
+        /* ------------------------------------------------------------------ */
+        .input-field {
+            border: 1px solid var(--border);
+            border-radius: 0.75rem;
+            padding: 0.75rem 1rem;
+            width: 100%;
+            background-color: var(--input-bg);
+            color: var(--text);
+            transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+            outline: none;
+        }
+        .input-field:focus { border-color: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,0.15); }
+
+        /* ------------------------------------------------------------------ */
+        /* Buttons                                                              */
+        /* ------------------------------------------------------------------ */
+        .btn-primary {
+            background-color: #ef4444;
+            color: #fff;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.75rem;
+            font-weight: 600;
+            transition: background-color 0.15s, transform 0.1s;
+            border: none;
+            cursor: pointer;
+        }
+        .btn-primary:hover  { background-color: #dc2626; }
+        .btn-primary:active { transform: scale(0.98); }
+        .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        .btn-secondary {
+            background-color: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            padding: 0.4rem 0.9rem;
+            border-radius: 0.6rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+        .btn-secondary:hover { background-color: var(--meta-bg); color: var(--text); }
+
+        /* ------------------------------------------------------------------ */
+        /* Dark mode toggle                                                     */
+        /* ------------------------------------------------------------------ */
+        #darkToggle {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            width: 2.4rem;
+            height: 2.4rem;
+            border-radius: 50%;
+            border: 1px solid var(--border);
+            background: var(--card);
+            color: var(--text);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            transition: background-color 0.2s, border-color 0.2s;
+            z-index: 50;
+        }
+        #darkToggle:hover { background-color: var(--meta-bg); }
+
+        /* ------------------------------------------------------------------ */
+        /* Loading spinner                                                      */
+        /* ------------------------------------------------------------------ */
+        .loading-spinner {
+            border: 3px solid rgba(255,255,255,0.3);
+            border-left-color: #fff;
+            border-radius: 50%;
+            width: 18px;
+            height: 18px;
+            animation: spin 0.75s linear infinite;
+            flex-shrink: 0;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ------------------------------------------------------------------ */
+        /* Video info + insights panels                                         */
+        /* ------------------------------------------------------------------ */
+        .meta-panel {
+            background-color: var(--meta-bg);
+            border-radius: 0.75rem;
+            padding: 1rem;
+            transition: background-color 0.2s;
+        }
+        #overallInsights {
+            background-color: var(--insights-bg);
+            border-radius: 0.75rem;
+            padding: 1rem 1.25rem;
+            line-height: 1.7;
+            transition: background-color 0.2s;
+        }
+        #overallInsights h1, #overallInsights h2, #overallInsights h3 {
+            font-weight: 700;
+            margin: 0.75rem 0 0.35rem;
+        }
+        #overallInsights ul { list-style: disc; padding-left: 1.4rem; }
+        #overallInsights strong { font-weight: 700; }
+
+        /* ------------------------------------------------------------------ */
+        /* Charts                                                               */
+        /* ------------------------------------------------------------------ */
+        .chart-wrapper {
+            position: relative;
+            height: 230px;
+            width: 100%;
+        }
+
+        /* ------------------------------------------------------------------ */
+        /* Comment list                                                         */
+        /* ------------------------------------------------------------------ */
+        .comment-list-container {
+            max-height: 600px;
+            overflow-y: auto;
+            padding-right: 0.4rem;
+        }
+        .comment-list-container::-webkit-scrollbar { width: 6px; }
+        .comment-list-container::-webkit-scrollbar-track { background: transparent; }
+        .comment-list-container::-webkit-scrollbar-thumb {
+            background: var(--scrollbar);
+            border-radius: 9999px;
+        }
+        .comment-list-container::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-h); }
+
+        .comment-item {
+            background-color: var(--meta-bg);
+            border-left: 4px solid transparent;
+            border-radius: 0.75rem;
+            padding: 0.9rem 1rem;
+            margin-bottom: 0.6rem;
+            transition: background-color 0.15s;
+        }
+        .comment-item.positive     { border-color: #22c55e; }
+        .comment-item.negative     { border-color: #ef4444; }
+        .comment-item.neutral      { border-color: #6b7280; }
+        .comment-item.mixed        { border-color: #f59e0b; }
+        .comment-item.suggestion   { border-color: #3b82f6; }
+        .comment-item.help         { border-color: #a855f7; }
+        .comment-item.neutral-other{ border-color: #9ca3af; }
+
+        /* ------------------------------------------------------------------ */
+        /* Badges                                                               */
+        /* ------------------------------------------------------------------ */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.2rem;
+            padding: 0.1rem 0.55rem;
+            border-radius: 9999px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+        /* sentiment */
+        .badge-positive     { background: #dcfce7; color: #15803d; }
+        .badge-negative     { background: #fee2e2; color: #b91c1c; }
+        .badge-neutral      { background: #f3f4f6; color: #4b5563; }
+        .badge-mixed        { background: #fef3c7; color: #92400e; }
+        /* category */
+        .badge-suggestion   { background: #dbeafe; color: #1d4ed8; }
+        .badge-help         { background: #f3e8ff; color: #7e22ce; }
+        /* dark mode badge overrides */
+        .dark .badge-positive   { background: #14532d; color: #86efac; }
+        .dark .badge-negative   { background: #450a0a; color: #fca5a5; }
+        .dark .badge-neutral    { background: #1f2937; color: #9ca3af; }
+        .dark .badge-mixed      { background: #451a03; color: #fcd34d; }
+        .dark .badge-suggestion { background: #1e3a5f; color: #93c5fd; }
+        .dark .badge-help       { background: #2e1065; color: #d8b4fe; }
+
+        /* ------------------------------------------------------------------ */
+        /* Highlights cards                                                     */
+        /* ------------------------------------------------------------------ */
+        .highlight-card {
+            background-color: var(--meta-bg);
+            border-radius: 0.75rem;
+            padding: 1rem;
+            transition: background-color 0.2s;
+        }
+        .highlight-card-icon { font-size: 1.3rem; margin-bottom: 0.4rem; }
+        .highlight-card-title {
+            font-weight: 700;
+            font-size: 0.8rem;
+            letter-spacing: 0.04em;
+            color: var(--text-muted);
+            margin-bottom: 0.6rem;
+        }
+        .highlight-item {
+            font-size: 0.8rem;
+            line-height: 1.45;
+            padding: 0.4rem 0.6rem;
+            border-radius: 0.5rem;
+            background-color: var(--card);
+            color: var(--text);
+            margin-bottom: 0.4rem;
+            border-left: 3px solid var(--border);
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+        #insightsCard   .highlight-item { border-color: #22c55e; }
+        #complaintsCard .highlight-item { border-color: #ef4444; }
+        #requestsCard   .highlight-item { border-color: #3b82f6; }
+
+        /* ------------------------------------------------------------------ */
+        /* History panel                                                        */
+        /* ------------------------------------------------------------------ */
+        .history-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.5rem;
+            padding: 0.6rem 0.7rem;
+            border-radius: 0.6rem;
+            cursor: pointer;
+            transition: background-color 0.15s;
+            text-align: left;
+            width: 100%;
+            border: none;
+            background: none;
+            color: var(--text);
+        }
+        .history-item:hover { background-color: var(--meta-bg); }
+        .history-thumb {
+            width: 36px;
+            height: 36px;
+            border-radius: 0.4rem;
+            background: var(--border);
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+        }
+        .history-title {
+            font-size: 0.75rem;
+            font-weight: 600;
+            line-height: 1.3;
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+        }
+        .history-meta { font-size: 0.68rem; color: var(--text-muted); margin-top: 0.15rem; }
+
+        /* ------------------------------------------------------------------ */
+        /* Misc                                                                 */
+        /* ------------------------------------------------------------------ */
+        .section-heading {
+            color: var(--text);
+            font-weight: 700;
+            font-size: 1.15rem;
+        }
+        .label-text { color: var(--text-muted); font-size: 0.8rem; font-weight: 600; }
+
+        /* Progress bar rows */
+        .stat-row { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.4rem; }
+        .stat-bar-track {
+            flex: 1;
+            height: 6px;
+            background: var(--border);
+            border-radius: 9999px;
+            overflow: hidden;
+        }
+        .stat-bar-fill { height: 100%; border-radius: 9999px; }
+    </style>
+</head>
+
+<body>
+    <!-- Dark mode toggle (fixed, top-right) -->
+    <button id="darkToggle" aria-label="Toggle dark mode" title="Toggle dark mode">🌙</button>
+
+    <div class="max-w-6xl mx-auto">
+
+        <!-- ============================================================= -->
+        <!-- Header                                                          -->
+        <!-- ============================================================= -->
+        <header class="text-center mb-8 pt-2">
+            <h1 class="text-5xl font-extrabold mb-1" style="color:var(--text)">Vidalyze</h1>
+            <p style="color:var(--text-muted)" class="text-lg">YouTube Comment Sentiment &amp; Insight Analyzer</p>
+        </header>
+
+        <!-- ============================================================= -->
+        <!-- Main grid                                                        -->
+        <!-- ============================================================= -->
+        <main class="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:items-start">
+
+            <!-- --------------------------------------------------------- -->
+            <!-- Left panel — Input + Video Info                             -->
+            <!-- --------------------------------------------------------- -->
+            <div class="lg:col-span-1 card flex flex-col gap-5">
+
+                <div>
+                    <h2 class="text-xl font-bold mb-4" style="color:var(--text)">Analyze a Video</h2>
+                    <form id="analysisForm" class="space-y-3">
+                        <div>
+                            <label for="youtube_url" class="label-text block mb-1">YouTube URL</label>
+                            <input type="url" id="youtube_url" name="youtube_url"
+                                   placeholder="https://www.youtube.com/watch?v=…"
+                                   required class="input-field"
+                                   aria-label="YouTube video URL">
+                        </div>
+                        <button type="submit" id="analyzeButton"
+                                class="btn-primary w-full flex items-center justify-center gap-2"
+                                aria-label="Analyze comments">
+                            <span id="buttonText">Analyze Comments</span>
+                            <div id="loadingSpinner" class="loading-spinner hidden"
+                                 role="status" aria-live="polite" aria-label="Analyzing, please wait"></div>
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Video info (hidden until analysis completes) -->
+                <div id="videoInfo" class="meta-panel hidden" aria-live="polite">
+                    <p class="label-text mb-2">VIDEO DETAILS</p>
+                    <p class="font-semibold text-sm mb-1" style="color:var(--text)" id="videoTitle"></p>
+                    <div class="text-xs space-y-1" style="color:var(--text-muted)">
+                        <p>Comments: <strong id="totalComments" style="color:var(--text)"></strong></p>
+                        <p>Engine: <strong id="analysisMethod" style="color:var(--text)"></strong></p>
+                    </div>
+                    <a id="videoLink" href="#" target="_blank" rel="noopener noreferrer"
+                       class="text-red-500 hover:text-red-400 text-xs mt-2 block font-medium">
+                        View on YouTube ↗
+                    </a>
+                </div>
+
+                <!-- Error -->
+                <div id="errorMessage" class="hidden" role="alert"
+                     style="background:#fee2e2;border:1px solid #fca5a5;border-radius:0.75rem;padding:0.9rem">
+                    <p class="text-sm font-semibold" style="color:#b91c1c" id="errorText"></p>
+                </div>
+
+                <!-- History panel -->
+                <div id="historyPanel" class="hidden">
+                    <p class="label-text mb-2">RECENT ANALYSES</p>
+                    <div id="historyList" class="space-y-1" aria-label="Recent analyses"></div>
+                </div>
+
+            </div>
+
+            <!-- --------------------------------------------------------- -->
+            <!-- Right panel — Results                                       -->
+            <!-- --------------------------------------------------------- -->
+            <div class="lg:col-span-2 card" id="resultsSection" style="display:none;" aria-live="polite">
+
+                <!-- Section header + Export button -->
+                <div class="flex items-center justify-between mb-5">
+                    <h2 class="text-xl font-bold" style="color:var(--text)">Analysis Results</h2>
+                    <button id="exportBtn" class="btn-secondary" aria-label="Export comments to CSV">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+                             aria-hidden="true">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        Export CSV
+                    </button>
+                </div>
+
+                <!-- Overall Insights -->
+                <div class="mb-6">
+                    <p class="label-text mb-2">OVERALL INSIGHTS</p>
+                    <div id="overallInsights"></div>
+                </div>
+
+                <!-- AI Comment Highlights (Gemini only) -->
+                <div id="highlightsSection" class="mb-6 hidden">
+                    <p class="label-text mb-3">AI COMMENT HIGHLIGHTS</p>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div class="highlight-card" id="insightsCard">
+                            <div class="highlight-card-icon">💡</div>
+                            <p class="highlight-card-title">KEY INSIGHTS</p>
+                            <div id="insightsList"></div>
+                        </div>
+                        <div class="highlight-card" id="complaintsCard">
+                            <div class="highlight-card-icon">⚠️</div>
+                            <p class="highlight-card-title">COMMON COMPLAINTS</p>
+                            <div id="complaintsList"></div>
+                        </div>
+                        <div class="highlight-card" id="requestsCard">
+                            <div class="highlight-card-icon">🔧</div>
+                            <p class="highlight-card-title">FEATURE REQUESTS</p>
+                            <div id="requestsList"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts — Sentiment donut + Category bar -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div>
+                        <p class="label-text mb-3">SENTIMENT DISTRIBUTION</p>
+                        <div class="chart-wrapper">
+                            <canvas id="sentimentChart" aria-label="Sentiment distribution donut chart" role="img"></canvas>
+                        </div>
+                    </div>
+                    <div>
+                        <p class="label-text mb-3">COMMENT CATEGORIES</p>
+                        <div class="chart-wrapper">
+                            <canvas id="categoryChart" aria-label="Comment category bar chart" role="img"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filters + comment count -->
+                <div class="flex flex-col sm:flex-row gap-3 mb-1 items-end">
+                    <div class="flex-1">
+                        <label for="sentimentFilter" class="label-text block mb-1">Filter by Sentiment</label>
+                        <select id="sentimentFilter" class="input-field"
+                                aria-label="Filter comments by sentiment"></select>
+                    </div>
+                    <div class="flex-1">
+                        <label for="categoryFilter" class="label-text block mb-1">Filter by Category</label>
+                        <select id="categoryFilter" class="input-field"
+                                aria-label="Filter comments by category"></select>
+                    </div>
+                </div>
+                <p id="commentCount" class="text-xs mb-3" style="color:var(--text-muted)"></p>
+
+                <!-- Comment list -->
+                <div id="commentsList" class="comment-list-container" aria-live="polite" aria-label="Filtered comments"></div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- JavaScript                                                           -->
+    <!-- ================================================================= -->
+    <script>
+    // Chart instances — declared first so applyTheme → refreshChartTheme can safely reference them
+    let sentimentChartInst = null;
+    let categoryChartInst  = null;
+
+    // -----------------------------------------------------------------------
+    // Theme management
+    // -----------------------------------------------------------------------
+    const html        = document.documentElement;
+    const darkToggle  = document.getElementById('darkToggle');
+    let   isDark      = localStorage.getItem('vidalyze-theme') === 'dark';
+
+    function applyTheme(dark) {
+        isDark = dark;
+        html.classList.toggle('dark', dark);
+        darkToggle.textContent = dark ? '☀️' : '🌙';
+        darkToggle.title = dark ? 'Switch to light mode' : 'Switch to dark mode';
+        localStorage.setItem('vidalyze-theme', dark ? 'dark' : 'light');
+        refreshChartTheme();
+    }
+
+    darkToggle.addEventListener('click', () => applyTheme(!isDark));
+
+    // Honour system preference on first visit
+    if (!localStorage.getItem('vidalyze-theme')) {
+        applyTheme(window.matchMedia('(prefers-color-scheme: dark)').matches);
+    } else {
+        applyTheme(isDark);
+    }
+
+    // -----------------------------------------------------------------------
+    // DOM references
+    // -----------------------------------------------------------------------
+    const analysisForm       = document.getElementById('analysisForm');
+    const youtubeUrlInput    = document.getElementById('youtube_url');
+    const analyzeButton      = document.getElementById('analyzeButton');
+    const buttonText         = document.getElementById('buttonText');
+    const loadingSpinner     = document.getElementById('loadingSpinner');
+    const videoInfo          = document.getElementById('videoInfo');
+    const videoTitleEl       = document.getElementById('videoTitle');
+    const totalCommentsEl    = document.getElementById('totalComments');
+    const analysisMethodEl   = document.getElementById('analysisMethod');
+    const videoLink          = document.getElementById('videoLink');
+    const errorMessageDiv    = document.getElementById('errorMessage');
+    const errorTextEl        = document.getElementById('errorText');
+    const resultsSection     = document.getElementById('resultsSection');
+    const overallInsightsDiv = document.getElementById('overallInsights');
+    const sentimentFilter    = document.getElementById('sentimentFilter');
+    const categoryFilter     = document.getElementById('categoryFilter');
+    const commentsListDiv    = document.getElementById('commentsList');
+    const commentCountEl     = document.getElementById('commentCount');
+    const exportBtn          = document.getElementById('exportBtn');
+    const historyPanel       = document.getElementById('historyPanel');
+    const historyList        = document.getElementById('historyList');
+    const highlightsSection  = document.getElementById('highlightsSection');
+    const insightsList       = document.getElementById('insightsList');
+    const complaintsList     = document.getElementById('complaintsList');
+    const requestsList       = document.getElementById('requestsList');
+
+    let allCommentsData = [];
+
+    // -----------------------------------------------------------------------
+    // Lookup tables — single source of truth
+    // -----------------------------------------------------------------------
+    const SENTIMENT_CLASS = {
+        Positive: 'positive', Negative: 'negative',
+        Neutral:  'neutral',  Mixed:    'mixed',
+    };
+    const SENTIMENT_BADGE_CLASS = {
+        positive: 'badge-positive', negative: 'badge-negative',
+        neutral:  'badge-neutral',  mixed:    'badge-mixed',
+    };
+    const CATEGORY_CLASS = {
+        Suggestion: 'suggestion', Help: 'help',
+        Positive:   'positive',   Negative: 'negative',
+        'Neutral/Other': 'neutral-other', Neutral: 'neutral', Mixed: 'mixed',
+    };
+    const CATEGORY_BADGE_CLASS = {
+        suggestion:    'badge-suggestion', help:     'badge-help',
+        positive:      'badge-positive',   negative: 'badge-negative',
+        neutral:       'badge-neutral',    'neutral-other': 'badge-neutral',
+        mixed:         'badge-mixed',
+    };
+    // Sentiment icons supplement color — important for colorblind users
+    const SENTIMENT_ICON = {
+        Positive: '✓', Negative: '✗', Neutral: '●', Mixed: '±',
+    };
+
+    // Chart.js color palette
+    const CHART_COLORS = {
+        Positive:   '#22c55e', Negative:   '#ef4444',
+        Neutral:    '#6b7280', Mixed:      '#f59e0b',
+        Suggestion: '#3b82f6', Help:       '#a855f7',
+    };
+    const DEFAULT_CHART_COLOR = '#9ca3af';
+
+    // -----------------------------------------------------------------------
+    // Markdown (marked.js + DOMPurify)
+    // -----------------------------------------------------------------------
+    function renderMarkdown(element, md) {
+        element.innerHTML = DOMPurify.sanitize(marked.parse(md || ''));
+    }
+
+    // -----------------------------------------------------------------------
+    // Charts
+    // -----------------------------------------------------------------------
+    function chartDefaults() {
+        const textColor = isDark ? '#94a3b8' : '#6b7280';
+        const gridColor = isDark ? '#1e293b' : '#e5e7eb';
+        return { textColor, gridColor };
+    }
+
+    function renderSentimentChart(sentimentData) {
+        const { textColor } = chartDefaults();
+        const canvas = document.getElementById('sentimentChart');
+        if (sentimentChartInst) sentimentChartInst.destroy();
+
+        const labels = Object.keys(sentimentData);
+        const values = Object.values(sentimentData);
+        const colors = labels.map(l => CHART_COLORS[l] || DEFAULT_CHART_COLOR);
+
+        sentimentChartInst = new Chart(canvas, {
+            type: 'doughnut',
+            data: {
+                labels,
+                datasets: [{ data: values, backgroundColor: colors, borderWidth: 2,
+                             borderColor: isDark ? '#1e293b' : '#ffffff', hoverOffset: 6 }],
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false, cutout: '65%',
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { color: textColor, padding: 12, font: { size: 12, weight: '600' },
+                                  usePointStyle: true, pointStyleWidth: 8 },
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => ` ${ctx.label}: ${ctx.parsed.toFixed(1)}%`
+                        },
+                    },
+                },
+            },
+        });
+    }
+
+    function renderCategoryChart(categoryData) {
+        const { textColor, gridColor } = chartDefaults();
+        const canvas = document.getElementById('categoryChart');
+        if (categoryChartInst) categoryChartInst.destroy();
+
+        const labels = Object.keys(categoryData);
+        const values = Object.values(categoryData);
+        const colors = labels.map(l => CHART_COLORS[l] || DEFAULT_CHART_COLOR);
+
+        categoryChartInst = new Chart(canvas, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{ data: values, backgroundColor: colors, borderWidth: 0,
+                             borderRadius: 4, barThickness: 18 }],
+            },
+            options: {
+                indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        ticks: { color: textColor, stepSize: 1, font: { size: 11 } },
+                        grid: { color: gridColor },
+                    },
+                    y: {
+                        ticks: { color: textColor, font: { size: 11, weight: '600' } },
+                        grid: { display: false },
+                    },
+                },
+            },
+        });
+    }
+
+    function refreshChartTheme() {
+        const { textColor, gridColor } = chartDefaults();
+
+        [sentimentChartInst, categoryChartInst].forEach(chart => {
+            if (!chart) return;
+
+            if (chart.config.type === 'doughnut') {
+                chart.options.plugins.legend.labels.color = textColor;
+                chart.data.datasets[0].borderColor = isDark ? '#1e293b' : '#ffffff';
+            } else {
+                if (chart.options.scales?.x) {
+                    chart.options.scales.x.ticks.color = textColor;
+                    chart.options.scales.x.grid.color  = gridColor;
+                }
+                if (chart.options.scales?.y) {
+                    chart.options.scales.y.ticks.color = textColor;
+                }
+            }
+            chart.update();
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // CSV Export
+    // -----------------------------------------------------------------------
+    exportBtn.addEventListener('click', () => {
+        if (!allCommentsData.length) return;
+
+        const escape = s => `"${String(s).replace(/"/g, '""')}"`;
+        const header = ['Comment', 'Sentiment', 'Category'].map(escape).join(',');
+        const rows   = allCommentsData.map(c =>
+            [escape(c.comment), escape(c.sentiment), escape(c.category)].join(',')
+        );
+        // BOM (﻿) ensures Excel opens UTF-8 CSV correctly
+        const blob = new Blob(['﻿' + [header, ...rows].join('\r\n')],
+                              { type: 'text/csv;charset=utf-8;' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = `vidalyze-export-${Date.now()}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    });
+
+    // -----------------------------------------------------------------------
+    // Form submission
+    // -----------------------------------------------------------------------
+    analysisForm.addEventListener('submit', async e => {
+        e.preventDefault();
+        errorMessageDiv.classList.add('hidden');
+        resultsSection.style.display = 'none';
+        videoInfo.classList.add('hidden');
+        commentsListDiv.innerHTML = '';
+
+        analyzeButton.disabled = true;
+        buttonText.textContent  = 'Analyzing…';
+        loadingSpinner.classList.remove('hidden');
+
+        const fd = new FormData();
+        fd.append('youtube_url', youtubeUrlInput.value.trim());
+
+        try {
+            const res  = await fetch('/analyze', { method: 'POST', body: fd });
+            const data = await res.json();
+            if (res.ok) {
+                allCommentsData = data.comments_data;
+                displayResults(data);
+            } else {
+                showError(data.error || 'An unknown error occurred.');
+            }
+        } catch (err) {
+            console.error(err);
+            showError('Network error or server unreachable. Please try again.');
+        } finally {
+            analyzeButton.disabled = false;
+            buttonText.textContent  = 'Analyze Comments';
+            loadingSpinner.classList.add('hidden');
+        }
+    });
+
+    function showError(msg) {
+        errorTextEl.textContent = msg;
+        errorMessageDiv.classList.remove('hidden');
+    }
+
+    // -----------------------------------------------------------------------
+    // Results rendering
+    // -----------------------------------------------------------------------
+    function displayResults(data) {
+        resultsSection.style.display = 'block';
+        videoInfo.classList.remove('hidden');
+
+        videoTitleEl.textContent      = data.video_title;
+        totalCommentsEl.textContent   = data.total_comments;
+        videoLink.href                = data.youtube_url;
+        analysisMethodEl.textContent  = data.analysis_method + (data.cached ? ' (cached)' : '');
+
+        renderMarkdown(overallInsightsDiv, data.overall_insights);
+        renderHighlights(data.highlights || { top_insights: [], top_complaints: [], feature_requests: [] });
+        renderSentimentChart(data.overall_sentiment);
+        renderCategoryChart(data.comment_categories);
+        populateFilters(data.comments_data);
+        renderComments();
+        loadHistory(); // refresh history panel after each new analysis
+    }
+
+    // -----------------------------------------------------------------------
+    // Filters
+    // -----------------------------------------------------------------------
+    function buildOptions(select, values, allLabel) {
+        select.innerHTML = '';
+        values.forEach(val => {
+            const opt       = document.createElement('option');
+            opt.value       = val;
+            opt.textContent = val === 'All' ? allLabel : val;
+            select.appendChild(opt);
+        });
+    }
+
+    function populateFilters(comments) {
+        const sentiments = ['All', ...new Set(comments.map(c => c.sentiment))].sort();
+        const categories = ['All', ...new Set(comments.map(c => c.category))].sort();
+        buildOptions(sentimentFilter, sentiments, 'All Sentiments');
+        buildOptions(categoryFilter,  categories, 'All Categories');
+    }
+
+    sentimentFilter.addEventListener('change', renderComments);
+    categoryFilter.addEventListener('change', renderComments);
+
+    // -----------------------------------------------------------------------
+    // Comment rendering — full DOM API, no innerHTML for user content
+    // -----------------------------------------------------------------------
+    function buildBadge(text, badgeClass, icon) {
+        const span = document.createElement('span');
+        span.className = `badge ${badgeClass}`;
+        if (icon) {
+            const iconSpan = document.createElement('span');
+            iconSpan.textContent = icon;
+            iconSpan.setAttribute('aria-hidden', 'true');
+            span.appendChild(iconSpan);
+        }
+        const textNode = document.createTextNode(text);
+        span.appendChild(textNode);
+        return span;
+    }
+
+    function buildCommentElement(comment) {
+        const sentClass = SENTIMENT_CLASS[comment.sentiment]  || 'neutral';
+        const catClass  = CATEGORY_CLASS[comment.category]   || 'neutral-other';
+        const sentBadge = SENTIMENT_BADGE_CLASS[sentClass]   || 'badge-neutral';
+        const catBadge  = CATEGORY_BADGE_CLASS[catClass]     || 'badge-neutral';
+        const icon      = SENTIMENT_ICON[comment.sentiment]  || '';
+
+        const wrapper = document.createElement('div');
+        wrapper.className = `comment-item ${sentClass} ${catClass}`;
+
+        // Accessible: announce sentiment + category to screen readers
+        const srLabel = document.createElement('span');
+        srLabel.className   = 'sr-only';
+        srLabel.textContent = `${comment.sentiment} sentiment, ${comment.category} category. `;
+
+        const meta = document.createElement('div');
+        meta.className = 'flex flex-wrap items-center gap-2 mb-2';
+        meta.setAttribute('aria-hidden', 'true'); // sr-label handles the text equivalent
+
+        const sentLabel = document.createElement('span');
+        sentLabel.className   = 'text-xs font-semibold';
+        sentLabel.style.color = 'var(--text-muted)';
+        sentLabel.textContent = 'Sentiment';
+
+        const catLabel = document.createElement('span');
+        catLabel.className   = 'text-xs font-semibold';
+        catLabel.style.color = 'var(--text-muted)';
+        catLabel.textContent = 'Category';
+
+        meta.append(
+            sentLabel,
+            buildBadge(comment.sentiment, sentBadge, icon),
+            catLabel,
+            buildBadge(comment.category, catBadge, null),
+        );
+
+        const body = document.createElement('p');
+        body.className   = 'text-sm leading-relaxed';
+        body.style.color = 'var(--text)';
+        body.textContent = comment.comment; // textContent — never innerHTML
+
+        wrapper.append(srLabel, meta, body);
+        return wrapper;
+    }
+
+    function renderComments() {
+        const selSentiment = sentimentFilter.value;
+        const selCategory  = categoryFilter.value;
+
+        const filtered = allCommentsData.filter(c =>
+            (selSentiment === 'All' || c.sentiment === selSentiment) &&
+            (selCategory  === 'All' || c.category  === selCategory)
+        );
+
+        commentsListDiv.innerHTML = '';
+
+        const total = allCommentsData.length;
+        commentCountEl.textContent = filtered.length === total
+            ? `Showing all ${total} comments`
+            : `Showing ${filtered.length} of ${total} comments`;
+
+        if (filtered.length === 0) {
+            const empty = document.createElement('p');
+            empty.className   = 'text-center mt-8 text-sm';
+            empty.style.color = 'var(--text-muted)';
+            empty.textContent = 'No comments match the selected filters.';
+            commentsListDiv.appendChild(empty);
+            return;
+        }
+
+        const frag = document.createDocumentFragment();
+        filtered.forEach(c => frag.appendChild(buildCommentElement(c)));
+        commentsListDiv.appendChild(frag); // single reflow
+    }
+
+    // -----------------------------------------------------------------------
+    // AI Highlights
+    // -----------------------------------------------------------------------
+    function buildHighlightItem(text) {
+        const el = document.createElement('div');
+        el.className = 'highlight-item';
+        el.textContent = text; // textContent — never innerHTML
+        return el;
+    }
+
+    function renderHighlights(highlights) {
+        const hasAny = (
+            highlights.top_insights.length > 0 ||
+            highlights.top_complaints.length > 0 ||
+            highlights.feature_requests.length > 0
+        );
+        if (!hasAny) { highlightsSection.classList.add('hidden'); return; }
+        highlightsSection.classList.remove('hidden');
+
+        const fill = (container, items, emptyMsg) => {
+            container.innerHTML = '';
+            if (!items.length) {
+                const msg = document.createElement('p');
+                msg.className = 'text-xs'; msg.style.color = 'var(--text-muted)';
+                msg.textContent = emptyMsg; container.appendChild(msg);
+            } else {
+                const f = document.createDocumentFragment();
+                items.forEach(t => f.appendChild(buildHighlightItem(t)));
+                container.appendChild(f);
+            }
+        };
+        fill(insightsList,   highlights.top_insights,     'No key insights found.');
+        fill(complaintsList, highlights.top_complaints,   'No common complaints found.');
+        fill(requestsList,   highlights.feature_requests, 'No feature requests found.');
+    }
+
+    // -----------------------------------------------------------------------
+    // History panel
+    // -----------------------------------------------------------------------
+    function timeAgo(isoString) {
+        const diff = Date.now() - new Date(isoString).getTime();
+        const m = Math.floor(diff / 60000);
+        if (m < 1)  return 'just now';
+        if (m < 60) return `${m}m ago`;
+        const h = Math.floor(m / 60);
+        if (h < 24) return `${h}h ago`;
+        return `${Math.floor(h / 24)}d ago`;
+    }
+
+    function buildHistoryItem(record) {
+        const btn = document.createElement('button');
+        btn.className = 'history-item';
+        btn.setAttribute('aria-label', `Re-analyze: ${record.video_title}`);
+        btn.title = 'Click to re-analyze this video';
+
+        const thumb = document.createElement('div');
+        thumb.className = 'history-thumb';
+        thumb.setAttribute('aria-hidden', 'true');
+        thumb.textContent = '▶';
+
+        const info = document.createElement('div');
+        info.style.minWidth = '0';
+
+        const title = document.createElement('div');
+        title.className = 'history-title';
+        title.textContent = record.video_title || 'Unknown video';
+
+        const meta = document.createElement('div');
+        meta.className = 'history-meta';
+        const topSentiment = Object.entries(record.overall_sentiment || {})
+            .sort((a, b) => b[1] - a[1])[0];
+        const sentStr = topSentiment ? `${topSentiment[0]} ${topSentiment[1]}%` : '';
+        meta.textContent = [
+            record.total_comments ? `${record.total_comments} comments` : '',
+            sentStr,
+            timeAgo(record.created_at),
+        ].filter(Boolean).join(' · ');
+
+        info.append(title, meta);
+        btn.append(thumb, info);
+
+        // Clicking fills the URL and re-submits the form (cache hit = instant)
+        btn.addEventListener('click', () => {
+            youtubeUrlInput.value = record.youtube_url;
+            analysisForm.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+        });
+        return btn;
+    }
+
+    async function loadHistory() {
+        try {
+            const res = await fetch('/history');
+            if (!res.ok) return;
+            const records = await res.json();
+            if (!records.length) return;
+            historyList.innerHTML = '';
+            const f = document.createDocumentFragment();
+            records.forEach(r => f.appendChild(buildHistoryItem(r)));
+            historyList.appendChild(f);
+            historyPanel.classList.remove('hidden');
+        } catch { /* history is non-critical */ }
+    }
+
+    // Load history on page load; refresh silently after each analysis
+    loadHistory();
+    </script>
+</body>
+</html>

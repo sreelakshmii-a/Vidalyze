@@ -9,7 +9,7 @@ Covers three layers:
 import os
 import sqlite3
 import sys
-from unittest.mock import patch, call
+from unittest.mock import patch
 
 import pytest
 

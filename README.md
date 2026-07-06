@@ -4,7 +4,7 @@
 
 # Vidalyze
 
-YouTube comment sentiment analyzer powered by Google Gemini AI — with TextBlob fallback, interactive charts, word cloud, dark mode, per-session history, and a one-command Docker deployment.
+Vidalyze leverages Google Gemini AI and TextBlob to analyze YouTube comment sentiment, unlocking deep insights that **maximize audience retention**. Built for creators and influencers, it features interactive charts, word clouds, session history, a dark mode UI, and instant one-command Docker deployment.
 
 ---
 
